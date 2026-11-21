@@ -1,11 +1,11 @@
-# IAleket — notes de design
+# Leketia — notes de design
 
 Deux skills ont été appliqués à l'interface reprise de HomeBoard : `emil-design-eng` (revue des animations et
 des états) et `frontend-component-build` (anatomie et états des composants ajoutés).
 
 ## Revue des animations (`emil-design-eng`)
 
-| Avant (HomeBoard) | Après (IAleket) | Pourquoi |
+| Avant (HomeBoard) | Après (Leketia) | Pourquoi |
 | --- | --- | --- |
 | `transition: all` sur 8 éléments | Propriétés nommées (`transform`, couleurs, ombre) | `all` anime aussi ce qu'on n'a pas prévu et coûte plus cher |
 | Les cartes rejouent leur entrée (0,5 s, en cascade) à chaque filtre ou ajout | Entrée de 300 ms, au premier affichage seulement | Une action répétée des dizaines de fois par jour ne doit pas être ralentie par une animation |

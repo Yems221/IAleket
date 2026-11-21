@@ -1,11 +1,11 @@
-// IAleket — ouverture de la base locale (IndexedDB).
+// Leketia — ouverture de la base locale (IndexedDB).
 // Chargé par la page ET par le service worker : le schéma n'est défini qu'ici.
-const IALEKET_DB = 'ialeket';
-const IALEKET_DB_VERSION = 1;
+const LEKETIA_DB = 'leketia';
+const LEKETIA_DB_VERSION = 1;
 
-function openIaleketDb() {
+function openLeketiaDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IALEKET_DB, IALEKET_DB_VERSION);
+    const req = indexedDB.open(LEKETIA_DB, LEKETIA_DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains('spaces')) db.createObjectStore('spaces', { keyPath: 'id' });
@@ -20,7 +20,7 @@ function openIaleketDb() {
 
 // Une opération sur un magasin ; résout avec le résultat de la requête renvoyée par fn.
 async function idbRun(store, mode, fn) {
-  const db = await openIaleketDb();
+  const db = await openLeketiaDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, mode);
     const req = fn(tx.objectStore(store));

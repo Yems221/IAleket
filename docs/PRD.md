@@ -1,4 +1,4 @@
-# IAleket — cahier des charges (PRD)
+# Leketia — cahier des charges (PRD)
 
 Version du 21 novembre 2026. Document vivant : il décrit le problème, la solution et ce qui reste à décider.
 Structure issue du skill `prd-development`, complétée par les rubriques du gabarit `to-prd`
@@ -8,7 +8,7 @@ Repères : 🔶 hypothèse plausible mais non vérifiée · 🔵 question ouvert
 
 ## 1. Résumé
 
-IAleket est un journal de liens personnel et open source. Il s'adresse aux personnes qui mettent de côté
+Leketia est un journal de liens personnel et open source. Il s'adresse aux personnes qui mettent de côté
 beaucoup de contenus vus sur X, Instagram, YouTube, TikTok ou Pinterest, et qui veulent les garder chez elles
 plutôt que dans le nuage d'un service. On partage un lien depuis n'importe quelle appli, il devient une carte
 avec aperçu, et tout reste sur l'appareil. Une sauvegarde en un geste part vers Telegram, Drive ou un fichier.
@@ -21,7 +21,7 @@ avec aperçu, et tout reste sur l'appareil. Une sauvegarde en un geste part vers
 - **Pourquoi c'est gênant ?** Les outils qui centralisent ces liens les stockent sur leurs serveurs : il faut
   créer un compte et faire confiance à un tiers pour des données qui dessinent ses centres d'intérêt.
 - **Preuves.** 🔶 Aucune étude : le besoin vient de l'usage personnel de la porteuse du projet et de HomeBoard,
-  son moodboard collaboratif, dont IAleket reprend l'interface.
+  son moodboard collaboratif, dont Leketia reprend l'interface.
 
 ## 3. Utilisateurs
 
@@ -42,7 +42,7 @@ avec aperçu, et tout reste sur l'appareil. Une sauvegarde en un geste part vers
 
 ## 5. Solution
 
-1. **Recevoir.** Android : IAleket apparaît dans la feuille de partage ; le lien, l'image ou la vidéo arrive
+1. **Recevoir.** Android : Leketia apparaît dans la feuille de partage ; le lien, l'image ou la vidéo arrive
    dans la fenêtre d'ajout pré-remplie. iPhone : bouton « Coller le lien », ou un Raccourci Apple qui ouvre
    `/add?u=<lien>`.
 2. **Ranger.** Chaque élément devient une carte avec titre, miniature et lecteur intégré (YouTube, X,
@@ -65,7 +65,7 @@ Aucune donnée d'usage n'est envoyée nulle part : ces mesures se vérifient à 
 
 ## 7. Récits utilisateurs
 
-1. En tant qu'utilisatrice Android, je veux partager un lien vers IAleket depuis n'importe quelle appli, pour
+1. En tant qu'utilisatrice Android, je veux partager un lien vers Leketia depuis n'importe quelle appli, pour
    le mettre de côté sans quitter ce que je regardais.
 2. En tant qu'utilisatrice Android, je veux partager une capture d'écran ou une vidéo de ma galerie, pour
    garder aussi ce qui n'a pas de lien.
@@ -74,13 +74,13 @@ Aucune donnée d'usage n'est envoyée nulle part : ces mesures se vérifient à 
    vite que sur Android.
 5. En tant qu'utilisatrice, je veux que le titre et l'image se remplissent seuls, pour ne rien saisir.
 6. En tant qu'utilisatrice, je veux pouvoir enregistrer un lien même sans aperçu, pour ne jamais être bloquée.
-7. En tant qu'utilisatrice, je veux regarder la vidéo ou le post sans quitter IAleket, pour relire vite.
+7. En tant qu'utilisatrice, je veux regarder la vidéo ou le post sans quitter Leketia, pour relire vite.
 8. En tant qu'utilisatrice, je veux ranger un élément dans une ou plusieurs collections, pour m'y retrouver.
 9. En tant qu'utilisatrice, je veux filtrer par plateforme ou par #tag, pour retrouver un contenu.
 10. En tant qu'utilisatrice, je veux marquer un élément « À voir », « Vu » ou « Favori », pour suivre ma lecture.
 11. En tant qu'utilisatrice, je veux modifier le titre, la note et les collections d'un élément.
 12. En tant qu'utilisatrice, je veux récupérer pendant 30 jours un élément supprimé par erreur.
-13. En tant qu'utilisatrice, je veux utiliser IAleket sans créer de compte.
+13. En tant qu'utilisatrice, je veux utiliser Leketia sans créer de compte.
 14. En tant qu'utilisatrice, je veux consulter mon journal hors connexion.
 15. En tant qu'utilisatrice, je veux m'envoyer tout mon journal ou une seule collection sur Telegram, pour en
     garder une copie hors du téléphone.
@@ -131,7 +131,7 @@ Aucune donnée d'usage n'est envoyée nulle part : ces mesures se vérifient à 
 
 ## 10. Hors périmètre de cette version
 
-- Comptes, synchronisation entre appareils, collaboration (HomeBoard l'avait, IAleket non).
+- Comptes, synchronisation entre appareils, collaboration (HomeBoard l'avait, Leketia non).
 - Export automatique en arrière-plan : impossible sans serveur qui garde un accès permanent au Drive.
 - Application iPhone native (99 $ par an, validation Apple, contraire à « chacun installe la sienne »).
 - Téléchargement des vidéos des plateformes. Statistiques d'usage.

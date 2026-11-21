@@ -1,4 +1,4 @@
-// ===== IAleket — interface reprise de HomeBoard, données sur l'appareil =====
+// ===== Leketia — interface reprise de HomeBoard, données sur l'appareil =====
 const App = (() => {
   let currentUser = null;
   let spaces = [];
@@ -663,7 +663,7 @@ const App = (() => {
       if (count === 0) { toast('Rien à sauvegarder dans cette sélection', 'error'); return; }
       const note = skippedVideos ? ` (${skippedVideos} vidéo${skippedVideos > 1 ? 's' : ''} non incluse${skippedVideos > 1 ? 's' : ''})` : '';
       if (send && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: 'Sauvegarde IAleket' }); toast(`${count} élément${count > 1 ? 's' : ''} envoyé${count > 1 ? 's' : ''}${note}`); }
+        try { await navigator.share({ files: [file], title: 'Sauvegarde Leketia' }); toast(`${count} élément${count > 1 ? 's' : ''} envoyé${count > 1 ? 's' : ''}${note}`); }
         catch (e) { if (e.name !== 'AbortError') { saveFileLocally(file); toast('Envoi impossible : fichier téléchargé à la place' + note); } }
       } else {
         saveFileLocally(file);
@@ -719,7 +719,7 @@ const App = (() => {
   }
 
   // Tags perso (localStorage, par utilisateur) — s'affichent même sans item porteur.
-  function customTagsKey() { return 'ialeket:customTags:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
+  function customTagsKey() { return 'leketia:customTags:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
   function getCustomTags() {
     try { const a = JSON.parse(localStorage.getItem(customTagsKey())); return Array.isArray(a) ? a.filter(t => typeof t === 'string') : []; }
     catch { return []; }
@@ -884,7 +884,7 @@ const App = (() => {
   }
 
   // Ordre des espaces (par utilisateur, localStorage). IDs inconnus → à la fin.
-  function spaceOrderKey() { return 'ialeket:spaceOrder:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
+  function spaceOrderKey() { return 'leketia:spaceOrder:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
   function getSpaceOrder() {
     try { const a = JSON.parse(localStorage.getItem(spaceOrderKey())); return Array.isArray(a) ? a : []; }
     catch { return []; }

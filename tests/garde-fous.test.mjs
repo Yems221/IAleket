@@ -18,10 +18,10 @@ test('refuse tout ce qui pourrait viser un réseau interne ou un autre protocole
 });
 
 test("n'accepte que les demandes venant de l'app elle-même", () => {
-  const req = (headers) => new Request('https://ialeket.example/api/fetch-link', { method: 'POST', headers });
+  const req = (headers) => new Request('https://leketia.example/api/fetch-link', { method: 'POST', headers });
   assert.equal(sameOrigin(req({ 'Sec-Fetch-Site': 'same-origin' })), true);
   assert.equal(sameOrigin(req({ 'Sec-Fetch-Site': 'cross-site' })), false);
-  assert.equal(sameOrigin(req({ Origin: 'https://ialeket.example' })), true);
+  assert.equal(sameOrigin(req({ Origin: 'https://leketia.example' })), true);
   assert.equal(sameOrigin(req({ Origin: 'https://autre-site.example' })), false);
   assert.equal(sameOrigin(req({})), false);
 });

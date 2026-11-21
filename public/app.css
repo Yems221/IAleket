@@ -1,4 +1,4 @@
-/* ===== IAleket — styles repris de HomeBoard, palette calebasse ===== */
+/* ===== Leketia — styles repris de HomeBoard, palette calebasse ===== */
 /* Audited against: UI/UX Pro Max (99 rules), Frontend-Design, Taste-Skill */
 /* 0 emojis, staggered reveals, liquid glass, grain texture, spring physics */
 
@@ -727,7 +727,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
 .trash-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; flex-wrap: wrap; }
 .trash-note { font-size: 11px; color: var(--ink-muted); margin-right: auto; }
 
-/* ===== IAleket : marque, sauvegarde ===== */
+/* ===== Leketia : marque, sauvegarde ===== */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .brand-mark { display: inline-flex; width: 26px; height: 26px; color: var(--accent); }
 .brand-mark svg { width: 100%; height: 100%; }

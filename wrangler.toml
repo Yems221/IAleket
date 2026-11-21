@@ -1,4 +1,4 @@
-# Leketia — aucun stockage serveur : ni base de données, ni fichiers.
+# leketia — aucun stockage serveur : ni base de données, ni fichiers.
 # Le serveur ne fait qu'une chose : aller chercher l'aperçu d'un lien.
 name = "leketia"
 compatibility_date = "2026-05-01"

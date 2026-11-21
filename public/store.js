@@ -1,4 +1,4 @@
-// Leketia — stockage sur l'appareil.
+// leketia — stockage sur l'appareil.
 // Remplace la base serveur de HomeBoard (D1 + R2) en répondant aux mêmes adresses
 // (/api/spaces, /api/items…) avec les mêmes formes de réponse : l'interface n'a pas
 // à savoir que les données sont locales. Seuls les aperçus de liens passent par le réseau.
@@ -266,7 +266,7 @@ const Store = (() => {
     const rows = data.items.map((it) => `<li><strong>${escHtml(it.title)}</strong>${it.url ? ` — <a href="${escHtml(it.url)}">${escHtml(it.url)}</a>` : ''}<br><small>${escHtml(it.created_at)}</small></li>`).join('\n');
     const json = JSON.stringify(data).replace(/</g, '\\u003c');
     const day = data.exportedAt.slice(0, 10);
-    const html = `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Leketia — sauvegarde du ${day}</title><body style="font-family:system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;line-height:1.5"><h1>Leketia — sauvegarde du ${day}</h1><p>${count} élément(s). Pour restaurer : ouvre Leketia, « Sauvegarde », puis « Importer un fichier ».</p><ol>${rows}</ol><script type="application/json" id="leketia-data">${json}</script></body></html>`;
+    const html = `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>leketia — sauvegarde du ${day}</title><body style="font-family:system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;line-height:1.5"><h1>leketia — sauvegarde du ${day}</h1><p>${count} élément(s). Pour restaurer : ouvre leketia, « Sauvegarde », puis « Importer un fichier ».</p><ol>${rows}</ol><script type="application/json" id="leketia-data">${json}</script></body></html>`;
     await idbRun('meta', 'readwrite', (s) => s.put(Date.now(), 'lastBackupAt'));
     return { file: new File([html], `leketia-${day}.html`, { type: 'text/html' }), count, skippedVideos };
   }
@@ -278,9 +278,9 @@ const Store = (() => {
     try {
       const m = raw.match(/<script type="application\/json" id="leketia-data">([\s\S]*?)<\/script>/);
       data = JSON.parse(m ? m[1] : raw);
-    } catch { fail('Ce fichier n’est pas une sauvegarde Leketia lisible'); }
-    if (!data || data.format !== 'leketia-export' || !Array.isArray(data.items)) fail('Ce fichier n’est pas une sauvegarde Leketia');
-    if (data.schemaVersion !== 1) fail('Sauvegarde créée par une version plus récente d’Leketia');
+    } catch { fail('Ce fichier n’est pas une sauvegarde leketia lisible'); }
+    if (!data || data.format !== 'leketia-export' || !Array.isArray(data.items)) fail('Ce fichier n’est pas une sauvegarde leketia');
+    if (data.schemaVersion !== 1) fail('Sauvegarde créée par une version plus récente d’leketia');
 
     const spaces = await allSpaces();
     const byName = new Map(spaces.map((s) => [s.name.toLowerCase(), s.id]));

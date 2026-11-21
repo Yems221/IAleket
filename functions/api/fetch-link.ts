@@ -159,9 +159,10 @@ async function twitterOembed(url: string): Promise<Partial<Preview> | null> {
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 280);
+    const clean = decodeEntities(text);
     return {
       title: d.author_name ? `${d.author_name} sur X` : 'Post X',
-      description: text,
+      description: clean,
     };
   } catch {
     return null;
@@ -236,13 +237,17 @@ function normalizeUrl(u: string): string {
 }
 
 function decodeEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#x2F;/g, '/');
+  const named: Record<string, string> = {
+    amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ', mdash: '—', ndash: '–',
+    hellip: '…', laquo: '«', raquo: '»', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“',
+  };
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code: string) => {
+    if (code[0] === '#') {
+      const n = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : m;
+    }
+    return named[code.toLowerCase()] ?? m;
+  });
 }
 
 function mergePreview(target: Preview, src: Partial<Preview>): void {

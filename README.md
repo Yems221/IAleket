@@ -1,6 +1,8 @@
-# Leketia
+# leketia
 
-Une calebasse de données : un journal de liens personnel et open source. Tu partages un lien depuis
+<img src="public/brand/leketia-logo.png" alt="Logo de leketia : une calebasse pleine, dont le contenu forme un dôme de cubes" width="200">
+
+Une calebasse pleine de données : un journal de liens personnel et open source. Tu partages un lien depuis
 X, Instagram, YouTube, TikTok ou Pinterest, il devient une carte avec aperçu, et tout reste sur ton appareil.
 
 **État : première version, essayée sur ordinateur seulement.** Pas encore déployée ni testée sur téléphone.
@@ -34,13 +36,13 @@ Pas encore fait : export direct vers Google Drive, partage rapide depuis iPhone.
 
 ## Origine
 
-Leketia part d'une copie complète de HomeBoard (moodboard collaboratif), ajustée : sans comptes, sans base
+leketia part d'une copie complète de HomeBoard (moodboard collaboratif), ajustée : sans comptes, sans base
 serveur, avec un stockage local et une sauvegarde par fichier. La branche `prototype/partage-ios` contient un
 banc d'essai jetable pour les tests de partage sur téléphone.
 
 ## Licence
 
-Leketia est distribué sous licence [GNU AGPL v3 ou ultérieure](LICENSE).
+leketia est distribué sous licence [GNU AGPL v3 ou ultérieure](LICENSE).
 
 Tu peux l'utiliser, le modifier et le déployer librement. Si tu en héberges une version
 modifiée que d'autres personnes utilisent, tu dois leur donner accès au code de cette version.

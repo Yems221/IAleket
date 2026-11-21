@@ -1,5 +1,5 @@
 // Outil de dessin du logo (développement seulement, jamais déployé).
-// Sert la scène three.js et enregistre les images rendues dans public/icons/.
+// Sert la scène three.js du logo et enregistre les images rendues dans public/icons/ et public/brand/.
 //   node tools/logo/server.mjs   puis ouvrir http://localhost:8799
 import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -8,16 +8,16 @@ import { dirname, join, normalize, extname } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json' };
+const TYPES = { '.svg': 'image/svg+xml', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json' };
 
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
-    const save = url.pathname.match(/^\/save\/([a-z0-9-]+\.png)$/);
+    const save = url.pathname.match(/^\/save\/(icons|brand)\/([a-z0-9-]+\.png)$/);
     if (req.method === 'POST' && save) {
       const chunks = [];
       for await (const c of req) chunks.push(c);
-      await writeFile(join(root, 'public', 'icons', save[1]), Buffer.concat(chunks));
+      await writeFile(join(root, 'public', save[1], save[2]), Buffer.concat(chunks));
       res.writeHead(200).end('ok');
       return;
     }

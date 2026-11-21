@@ -1,4 +1,4 @@
-// Leketia — outils communs des fonctions serveur.
+// leketia — outils communs des fonctions serveur.
 // Le serveur ne garde rien : il lit l'aperçu d'un lien pour le compte de l'app, puis oublie.
 
 export function json(data: unknown, status = 200): Response {

@@ -1,10 +1,10 @@
-// Leketia — service worker (repris de HomeBoard)
+// leketia — service worker (repris de HomeBoard)
 // 1. Reçoit le partage Android (POST /share-target) directement sur l'appareil.
 // 2. Garde l'app utilisable hors ligne. App (HTML/JS/CSS) : réseau d'abord, pour que
 //    les mises à jour arrivent tout de suite. Icônes : cache d'abord.
 importScripts('/idb.js');
 
-const CACHE_NAME = 'leketia-v1';
+const CACHE_NAME = 'leketia-v2';
 const STATIC_ASSETS = [
   '/',
   '/app.css',

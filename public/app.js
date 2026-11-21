@@ -1,4 +1,4 @@
-// ===== Leketia — interface reprise de HomeBoard, données sur l'appareil =====
+// ===== leketia — interface reprise de HomeBoard, données sur l'appareil =====
 const App = (() => {
   let currentUser = null;
   let spaces = [];
@@ -291,8 +291,6 @@ const App = (() => {
           ? `<video class="card-video" src="${esc(item.image_url)}#t=0.1" muted playsinline preload="metadata" onerror="var w=this.closest('.card-image-wrap'); if(w) w.remove()"></video>`
           : `<img class="card-image" src="${esc(item.image_url)}" alt="${esc(item.title)}" loading="lazy" width="400" height="300" onerror="this.style.display='none'; var w=this.closest('.card-image-wrap'); var f=w&&w.querySelector('.card-play-facade'); if(f){f.style.display='flex'} else if(w){w.remove()}">`;
       }
-      const linkIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
-      const photoIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
       // Facade "play" quand un lecteur est possible mais sans miniature (pas de zone grise)
       const bigPlay = '<svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
       const facade = emb
@@ -312,12 +310,9 @@ const App = (() => {
 
       // Catégories multiples → puces
       const catNames = (item.space_ids || []).map(sid => spaces.find(s => s.id === sid)?.name).filter(Boolean);
-      const catChips = catNames.length
+      const catChips = catNames.length && spaces.length > 1
         ? `<div class="card-cats">${catNames.map(n => `<span class="cat-chip">${esc(n)}</span>`).join('')}</div>` : '';
 
-      let typeBadge = item.type === 'link'
-        ? `<span class="card-type-badge">${linkIcon} lien</span>`
-        : `<span class="card-type-badge">${photoIcon} ${isVideo ? 'vidéo' : 'photo'}</span>`;
 
       const dotsSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
 
@@ -346,7 +341,7 @@ const App = (() => {
       }
 
       const imageWrapHtml = hasVisual
-        ? `<div class="card-image-wrap">${mediaHtml}${facade}${item.image_url && emb ? embedBadge : ''}${videoBadge}${typeBadge}</div>`
+        ? `<div class="card-image-wrap">${mediaHtml}${facade}${item.image_url && emb ? embedBadge : ''}${videoBadge}</div>`
         : '';
 
       const footerHtml = isTrash ? '' : `<div class="card-footer">
@@ -388,11 +383,11 @@ const App = (() => {
   }
 
   function emptyStateHtml(filtered) {
-    const gourdSvg = '<svg width="44" height="44" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 6h6M24 6v5M19.5 11.5c-1 3 .5 5-1.5 7.5C13 22 9 26.5 9 32c0 7 6.5 11 15 11s15-4 15-11c0-5.5-4-10-9-13-2-2.5-.5-4.5-1.500-7.5z"/><circle cx="18" cy="31" r="1.6" fill="currentColor"/><circle cx="24" cy="27" r="1.6" fill="currentColor"/><circle cx="30" cy="32" r="1.6" fill="currentColor"/><circle cx="24" cy="36" r="1.6" fill="currentColor"/><path d="M18 31l6-4 6 5-6 4z" stroke-width="1.2"/></svg>';
-    if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${gourdSvg}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
+    const mark = '<img src="/brand/leketia-mark.webp" alt="" width="72" height="72">';
+    if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${mark}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
     const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
     const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';
-    return `<div class="empty-state"><div class="illustration">${gourdSvg}</div><h3>${heading}</h3><p>${hint}</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter un lien</button></div>`;
+    return `<div class="empty-state"><div class="illustration">${mark}</div><h3>${heading}</h3><p>${hint}</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter un lien</button></div>`;
   }
 
   function showItemActions(e, id) {
@@ -663,7 +658,7 @@ const App = (() => {
       if (count === 0) { toast('Rien à sauvegarder dans cette sélection', 'error'); return; }
       const note = skippedVideos ? ` (${skippedVideos} vidéo${skippedVideos > 1 ? 's' : ''} non incluse${skippedVideos > 1 ? 's' : ''})` : '';
       if (send && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: 'Sauvegarde Leketia' }); toast(`${count} élément${count > 1 ? 's' : ''} envoyé${count > 1 ? 's' : ''}${note}`); }
+        try { await navigator.share({ files: [file], title: 'Sauvegarde leketia' }); toast(`${count} élément${count > 1 ? 's' : ''} envoyé${count > 1 ? 's' : ''}${note}`); }
         catch (e) { if (e.name !== 'AbortError') { saveFileLocally(file); toast('Envoi impossible : fichier téléchargé à la place' + note); } }
       } else {
         saveFileLocally(file);

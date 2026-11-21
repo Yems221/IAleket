@@ -1,6 +1,6 @@
 {
-  "name": "Leketia — journal de liens",
-  "short_name": "Leketia",
+  "name": "leketia — journal de liens",
+  "short_name": "leketia",
   "description": "Une calebasse de données : garde sur ton appareil les liens que tu partages depuis tes applis",
   "id": "/",
   "start_url": "/",

@@ -23,4 +23,9 @@ quel stockage ? Son verdict sera consigné ici ; le code du prototype ne sera pa
 
 IAleket reprend les idées de HomeBoard (moodboard collaboratif), sans ses comptes ni sa base.
 
-La licence n'est pas encore choisie.
+## Licence
+
+IAleket est distribué sous licence [GNU AGPL v3 ou ultérieure](LICENSE).
+
+Tu peux l'utiliser, le modifier et le déployer librement. Si tu en héberges une version
+modifiée que d'autres personnes utilisent, tu dois leur donner accès au code de cette version.

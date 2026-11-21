@@ -1,16 +1,15 @@
 {
-  "name": "homeboard",
-  "version": "1.0.0",
+  "name": "ialeket",
+  "version": "0.1.0",
   "private": true,
-  "description": "Moodboard collaboratif déco/immo — Pinterest-like",
+  "license": "AGPL-3.0-or-later",
+  "description": "Une calebasse de données : journal de liens personnel, gardé sur l'appareil",
   "scripts": {
-    "deploy": "wrangler pages deploy public/",
-    "db:init": "wrangler d1 execute homeboard-db --file=db/schema.sql"
-  },
-  "dependencies": {
-    "@cloudflare/puppeteer": "^1.0.2"
+    "dev": "wrangler pages dev public --port 8788",
+    "deploy": "wrangler pages deploy public",
+    "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.85.0"
   }
 }

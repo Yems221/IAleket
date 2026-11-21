@@ -1,20 +1,14 @@
-// Fetch Link Preview — POST /api/fetch-link
+// Aperçu d'un lien — POST /api/fetch-link
 //
-// Moteur hybride, du moins cher au plus cher :
-//   1. oEmbed officiel (TikTok, Twitter/X)      → zéro temps-navigateur
-//   2. Scraping Open Graph amélioré (Pinterest, e-commerce, sites classiques)
-//   3. Cloudflare Browser Rendering en dernier recours (Instagram & pages JS/anti-bot),
-//      en émulation mobile ; extraction de l'image du post, sinon screenshot du contenu.
-//
-// Toute miniature trouvée est TÉLÉCHARGÉE dans R2 pour qu'elle n'expire jamais
-// (les CDN sociaux servent des URLs signées qui cassent le hotlink au bout d'un moment).
-import puppeteer from '@cloudflare/puppeteer';
-import { Env, json } from '../_shared';
+// Repris de HomeBoard, sans stockage ni navigateur automatisé :
+//   1. oEmbed officiel (YouTube, Pinterest, TikTok, X)
+//   2. Lecture des balises Open Graph de la page (sites classiques)
+// Rien n'est conservé ici. L'adresse de la miniature est renvoyée à l'app, qui la
+// récupère via /api/thumb et la garde sur l'appareil.
+import { json, sameOrigin, publicHttpUrl, guardedFetch, readCapped } from '../_shared';
 
 const DESKTOP_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-const MOBILE_UA =
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1';
 
 interface Preview {
   title: string;
@@ -23,8 +17,8 @@ interface Preview {
   price: string;
 }
 
-export async function onRequestPost(context: { request: Request; env: Env }): Promise<Response> {
-  const { env } = context;
+export async function onRequestPost(context: { request: Request }): Promise<Response> {
+  if (!sameOrigin(context.request)) return json({ ok: false, error: 'Demande refusée' }, 403);
 
   let body: { url?: string };
   try {
@@ -36,13 +30,10 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
     return json({ ok: false, error: 'URL requise' }, 400);
   }
 
-  const input = normalizeUrl(body.url.trim());
-  let host = '';
-  try {
-    host = new URL(input).hostname.replace(/^www\./, '').toLowerCase();
-  } catch {
-    return json({ ok: false, error: 'URL invalide' }, 400);
-  }
+  const checked = publicHttpUrl(normalizeUrl(body.url.trim()));
+  if (!checked) return json({ ok: false, error: 'Lien invalide' }, 400);
+  const input = checked.toString();
+  let host = checked.hostname.replace(/^www\./, '').toLowerCase();
 
   // Les liens courts (vt/vm.tiktok.com, tiktok.com/t/…) ne contiennent pas l'ID
   // de la vidéo : on suit la redirection pour obtenir l'URL canonique embarquable.
@@ -67,6 +58,12 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
     } else if (host === 'x.com' || host.endsWith('twitter.com')) {
       const o = await twitterOembed(url);
       if (o) mergePreview(preview, o);
+    } else if (host.endsWith('youtube.com') || host === 'youtu.be') {
+      const o = await simpleOembed(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`);
+      if (o) mergePreview(preview, o);
+    } else if (/(^|\.)pinterest\.[a-z.]+$/.test(host)) {
+      const o = await simpleOembed(`https://www.pinterest.com/oembed.json?url=${encodeURIComponent(url)}`);
+      if (o) mergePreview(preview, o);
     }
 
     // 2) Scraping Open Graph si on manque encore de données
@@ -75,17 +72,10 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
       mergePreview(preview, og);
     }
 
-    // 3) Browser Rendering en dernier recours (Instagram, pages JS)
-    if (!preview.image_url && env.BROWSER) {
-      const r = await browserRender(env, url);
-      mergePreview(preview, r);
-      if (r.note) note = r.note;
-    }
-
-    // 4) Persistance de la miniature dans R2 (jamais de hotlink)
-    if (preview.image_url && /^https?:\/\//i.test(preview.image_url)) {
-      const stored = await persistImage(env, preview.image_url, url);
-      if (stored) preview.image_url = stored; // sinon on garde l'URL d'origine en secours
+    if (!preview.image_url && host.endsWith('instagram.com')) {
+      note = "Instagram ne fournit pas d'image d'aperçu. Le lecteur intégré fonctionnera quand même.";
+    } else if (!preview.image_url && !preview.title) {
+      note = "Aperçu indisponible pour ce lien. Tu peux remplir le titre à la main.";
     }
 
     // canonical_url : le front l'enregistre pour que le lecteur intégré fonctionne.
@@ -100,7 +90,7 @@ export async function onRequestPost(context: { request: Request; env: Env }): Pr
 // ---------------------------------------------------------------------------
 
 function isShortLink(host: string, url: string): boolean {
-  if (host === 'vt.tiktok.com' || host === 'vm.tiktok.com') return true;
+  if (host === 'vt.tiktok.com' || host === 'vm.tiktok.com' || host === 'pin.it') return true;
   if (host.endsWith('tiktok.com') && /^\/t\//.test(safePath(url))) return true;
   return false;
 }
@@ -108,13 +98,8 @@ function isShortLink(host: string, url: string): boolean {
 // Suit les redirections et renvoie l'URL finale (sans les paramètres de tracking).
 async function resolveCanonical(url: string): Promise<string> {
   try {
-    const res = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: { 'User-Agent': DESKTOP_UA },
-      signal: AbortSignal.timeout(8000),
-    });
-    const final = res.url || url;
+    const res = await guardedFetch(url, { 'User-Agent': DESKTOP_UA });
+    const final = (res && res.url) || url;
     const u = new URL(final);
     return u.origin + u.pathname; // on retire ?_t=…&_r=… etc.
   } catch {
@@ -139,10 +124,23 @@ async function tiktokOembed(url: string): Promise<Partial<Preview> | null> {
     if (!res.ok) return null;
     const d = (await res.json()) as { title?: string; author_name?: string; thumbnail_url?: string };
     return {
+      // thumbnail_url n'est plus toujours fourni par TikTok : la lecture Open Graph prend alors le relais.
       title: d.title || d.author_name || 'Vidéo TikTok',
       description: d.author_name ? `@${d.author_name}` : '',
       image_url: d.thumbnail_url || '',
     };
+  } catch {
+    return null;
+  }
+}
+
+// oEmbed standard (YouTube, Pinterest) : titre, auteur, et miniature quand elle est fournie.
+async function simpleOembed(endpoint: string): Promise<Partial<Preview> | null> {
+  try {
+    const res = await fetch(endpoint, { headers: { 'User-Agent': DESKTOP_UA }, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const d = (await res.json()) as { title?: string; author_name?: string; thumbnail_url?: string };
+    return { title: d.title || '', description: d.author_name || '', image_url: d.thumbnail_url || '' };
   } catch {
     return null;
   }
@@ -173,110 +171,25 @@ async function twitterOembed(url: string): Promise<Partial<Preview> | null> {
 async function ogScrape(sourceUrl: string): Promise<Partial<Preview>> {
   const out: Partial<Preview> = {};
   try {
-    const res = await fetch(sourceUrl, {
-      headers: {
-        'User-Agent': DESKTOP_UA,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(9000),
-    });
-    if (!res.ok) return out;
+    const res = await guardedFetch(sourceUrl, {
+      'User-Agent': DESKTOP_UA,
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+    }, 9000);
+    if (!res || !res.ok) return out;
     if (!(res.headers.get('content-type') || '').includes('html')) return out;
 
-    const html = await res.text();
+    const bytes = await readCapped(res, 1024 * 1024, true); // le 1er Mo suffit : les balises sont en tête de page
+    if (!bytes) return out;
+    const html = new TextDecoder().decode(bytes);
     out.title = metaContent(html, 'og:title') || titleTag(html);
     out.description = metaContent(html, 'og:description') || metaContent(html, 'description');
     out.image_url = resolveUrl(metaContent(html, 'og:image'), sourceUrl);
     out.price = extractPrice(html);
   } catch {
-    /* ignore — on tentera le navigateur */
+    /* page illisible : l'élément sera créé sans aperçu */
   }
   return out;
-}
-
-async function browserRender(env: Env, url: string): Promise<Partial<Preview> & { note?: string }> {
-  const out: Partial<Preview> & { note?: string } = {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const browser = await puppeteer.launch(env.BROWSER as any);
-  try {
-    const page = await browser.newPage();
-    await page.setUserAgent(MOBILE_UA);
-    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-    // domcontentloaded : les SPA (X, Instagram) ne stabilisent jamais le réseau ;
-    // on ne bloque pas dessus et une nav trop lente ne doit pas casser la réponse.
-    try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    } catch {
-      /* on tente quand même d'extraire ce qui a été rendu */
-    }
-
-    const data = (await page.evaluate(() => {
-      const attr = (sel: string, name: string) =>
-        (document.querySelector(sel) as HTMLElement | null)?.getAttribute(name) || '';
-      const title = attr('meta[property="og:title"]', 'content') || document.title || '';
-      const description = attr('meta[property="og:description"]', 'content') || '';
-      let image = attr('meta[property="og:image"]', 'content');
-      if (!image) {
-        const el = document.querySelector('article img, main img, img[srcset], img[decoding]') as HTMLImageElement | null;
-        image = el?.currentSrc || el?.src || '';
-      }
-      const loginWall =
-        !!document.querySelector('input[name="password"], input[name="username"], a[href*="/accounts/login"]') ||
-        /\/accounts\/login|\/login/.test(location.href);
-      return { title, description, image, loginWall };
-    })) as { title: string; description: string; image: string; loginWall: boolean };
-
-    out.title = data.title;
-    out.description = data.description;
-
-    if (data.image) {
-      out.image_url = data.image;
-    } else if (!data.loginWall) {
-      // Dernier recours : screenshot du contenu rendu, stocké directement en R2.
-      const buf = (await page.screenshot({ type: 'jpeg', quality: 80 })) as Uint8Array;
-      const stored = await persistBuffer(env, buf, 'jpg', 'image/jpeg');
-      if (stored) out.image_url = stored;
-    } else {
-      out.note =
-        "Ce contenu exige une connexion (Instagram) — ajoute une image manuellement ou colle l'URL de l'image.";
-    }
-  } catch {
-    if (!out.image_url) out.note = "Aperçu indisponible pour ce lien — ajoute une image manuellement.";
-  } finally {
-    await browser.close(); // session éphémère : rien ne persiste
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// Persistance R2
-// ---------------------------------------------------------------------------
-
-async function persistImage(env: Env, imageUrl: string, referer: string): Promise<string> {
-  try {
-    const res = await fetch(imageUrl, {
-      headers: { 'User-Agent': DESKTOP_UA, Referer: referer, Accept: 'image/*' },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok || !res.body) return '';
-    const ct = res.headers.get('content-type') || 'image/jpeg';
-    if (!ct.startsWith('image/')) return '';
-    return persistBuffer(env, new Uint8Array(await res.arrayBuffer()), extFor(ct), ct);
-  } catch {
-    return '';
-  }
-}
-
-async function persistBuffer(env: Env, bytes: Uint8Array, ext: string, contentType: string): Promise<string> {
-  try {
-    const key = `uploads/${crypto.randomUUID()}.${ext}`;
-    await env.STORAGE.put(key, bytes, { httpMetadata: { contentType } });
-    return `/images/${key.replace('uploads/', '')}`;
-  } catch {
-    return '';
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -320,14 +233,6 @@ function resolveUrl(maybeUrl: string, base: string): string {
 
 function normalizeUrl(u: string): string {
   return /^https?:\/\//i.test(u) ? u : `https://${u}`;
-}
-
-function extFor(contentType: string): string {
-  if (contentType.includes('png')) return 'png';
-  if (contentType.includes('webp')) return 'webp';
-  if (contentType.includes('gif')) return 'gif';
-  if (contentType.includes('avif')) return 'avif';
-  return 'jpg';
 }
 
 function decodeEntities(s: string): string {

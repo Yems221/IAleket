@@ -1,4 +1,4 @@
-// ===== HomeBoard v3 — Audited & Upgraded =====
+// ===== IAleket — interface reprise de HomeBoard, données sur l'appareil =====
 const App = (() => {
   let currentUser = null;
   let spaces = [];
@@ -19,47 +19,24 @@ const App = (() => {
   let editingId = null;
   let dragSession = null;      // session de réorganisation d'onglets d'espaces (drag)
   let lastPointer = { x: 0, y: 0 };
+  let gridShownOnce = false;   // l'entrée animée des cartes ne joue qu'une fois
 
   // ===== API =====
-  async function api(path, { method = 'GET', body } = {}) {
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(path, opts);
-    const data = await res.json();
-    if (!res.ok && !data.ok) throw new Error(data.error || `Erreur ${res.status}`);
-    return data;
-  }
+  // Mêmes appels que dans HomeBoard, servis par le stockage local (store.js).
+  const api = (path, opts) => Store.api(path, opts);
 
-  // ===== Auth =====
-  async function login(username, password) {
-    const data = await api('/api/auth/login', { method: 'POST', body: { username, password } });
-    currentUser = data.user;
-    document.getElementById('userAvatar').textContent = currentUser.display_name[0].toUpperCase();
-    document.getElementById('userName').textContent = currentUser.display_name;
-    document.getElementById('loginPage').style.display = 'none';
+  // ===== Démarrage (pas de compte : les données restent sur l'appareil) =====
+  async function start() {
+    currentUser = { id: 'local' };
     document.getElementById('app').classList.add('active');
-    await loadSpaces();
-  }
-
-  async function logout() {
-    try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
-    currentUser = null; spaces = []; items = [];
-    document.getElementById('app').classList.remove('active');
-    document.getElementById('loginPage').style.display = 'flex';
-  }
-
-  async function checkSession() {
     try {
-      const data = await api('/api/auth/me');
-      if (data.ok) {
-        currentUser = data.user;
-        document.getElementById('userAvatar').textContent = currentUser.display_name[0].toUpperCase();
-        document.getElementById('userName').textContent = currentUser.display_name;
-        document.getElementById('loginPage').style.display = 'none';
-        document.getElementById('app').classList.add('active');
-        await loadSpaces();
-      }
-    } catch { document.getElementById('loginPage').style.display = 'flex'; }
+      await Store.housekeeping();
+      await loadSpaces();
+      refreshBackupHint();
+    } catch (e) {
+      document.getElementById('grid').innerHTML = '';
+      toast('Le stockage de ce navigateur est indisponible (navigation privée ?)', 'error');
+    }
   }
 
   // ===== Spaces =====
@@ -68,7 +45,7 @@ const App = (() => {
     spaces = data.spaces || [];
     renderSpacesTabs();
     await loadItems();
-    handleSharedIntent(); // partage natif reçu via /share-target → ouvre la modale pré-remplie (une fois)
+    await handleSharedIntent(); // partage reçu d'une autre appli → fenêtre d'ajout pré-remplie (une fois)
   }
 
   function renderSpacesTabs() {
@@ -99,7 +76,7 @@ const App = (() => {
     const trashTab = mk('button', 'space-tab space-tab-trash' + (activeSpace === 'trash' ? ' active' : ''));
     trashTab.setAttribute('role', 'tab');
     trashTab.dataset.space = 'trash';
-    trashTab.innerHTML = '🗑 Corbeille';
+    trashTab.textContent = 'Corbeille';
     trashTab.onclick = () => setSpace('trash');
     bar.appendChild(trashTab);
   }
@@ -114,7 +91,7 @@ const App = (() => {
       document.getElementById('spaceName').value = '';
       closeAddSpace();
       await loadSpaces();
-      toast('Espace créé');
+      toast('Collection créée');
     } catch (e) { toast(e.message, 'error'); }
   }
 
@@ -163,6 +140,10 @@ const App = (() => {
       return { platform: 'youtube', src: `https://www.youtube.com/embed/${u.searchParams.get('v')}` };
     if (host === 'youtu.be' && u.pathname.length > 1)
       return { platform: 'youtube', src: `https://www.youtube.com/embed/${u.pathname.slice(1)}` };
+    if (host.endsWith('youtube.com') && (m = u.pathname.match(/^\/shorts\/([A-Za-z0-9_-]+)/)))
+      return { platform: 'youtube', src: `https://www.youtube.com/embed/${m[1]}` };
+    if (/(^|\.)pinterest\.[a-z.]+$/.test(host) && (m = u.pathname.match(/\/pin\/(\d+)/)))
+      return { platform: 'pinterest', src: `https://assets.pinterest.com/ext/embed.html?id=${m[1]}` };
     return null;
   }
 
@@ -184,8 +165,8 @@ const App = (() => {
     document.getElementById('embedBox').innerHTML = ''; // stoppe la lecture (embed OU vidéo locale)
   }
 
-  // Source unique : ce qui fait qu'un média uploadé est une vidéo (cf. MEDIA_TYPES côté serveur).
-  const isVideoUrl = (u) => /\.(mp4|mov|webm)$/i.test(u || '');
+  // Un média enregistré sur l'appareil est une image ou une vidéo : le stockage local le sait.
+  const isVideoUrl = (u) => !!u && Store.kindOf(u) === 'video';
 
   // Lecteur in-app (médias uploadés) — image OU vidéo, réutilise la lightbox des embeds
   function openMedia(url, title) {
@@ -224,7 +205,6 @@ const App = (() => {
     document.getElementById('actions-' + id)?.classList.remove('active');
     document.getElementById('editTitle').value = item.title || '';
     document.getElementById('editDesc').value = item.description || '';
-    document.getElementById('editPrice').value = item.price || '';
     document.getElementById('editUrl').value = item.url || '';
     document.getElementById('editUrlGroup').style.display = item.type === 'link' ? '' : 'none';
     renderCatChecks('editItemCats', item.space_ids || []);
@@ -241,7 +221,6 @@ const App = (() => {
       await api('/api/items/' + editingId, { method: 'PUT', body: {
         title: document.getElementById('editTitle').value.trim(),
         description: document.getElementById('editDesc').value.trim(),
-        price: document.getElementById('editPrice').value.trim(),
         url: document.getElementById('editUrl').value.trim(),
         space_ids: cats,
       }});
@@ -284,6 +263,8 @@ const App = (() => {
     renderTagBar(); // les tags dépendent des items chargés — on rafraîchit la barre à chaque rendu
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
+    grid.classList.toggle('reveal', !gridShownOnce);
+    gridShownOnce = true;
     const visible = activeTag ? items.filter(it => tagsOf(it).includes(activeTag)) : items;
     if (visible.length === 0) { grid.innerHTML = emptyStateHtml(activeTag); return; }
 
@@ -322,11 +303,10 @@ const App = (() => {
 
       // Status
       const st = item.status;
-      const statusLabels = { moodboard: 'Moodboard', proposition: 'Proposition', achete: 'Acheté' };
-      const sc = { moodboard: 'status-moodboard', proposition: 'status-proposition', achete: 'status-achete' };
+      const statusLabels = { a_voir: 'À voir', vu: 'Vu', favori: 'Favori' };
+      const sc = { a_voir: 'status-a-voir', vu: 'status-vu', favori: 'status-favori' };
 
-      let buyer = st === 'achete' && item.purchased_by_display_name
-        ? `<span class="card-buyer">par ${esc(item.purchased_by_display_name)}</span>` : '';
+      const buyer = '';
 
       let priceHtml = item.price ? `<div class="card-price">${esc(item.price)}</div>` : '';
 
@@ -357,9 +337,9 @@ const App = (() => {
         <div class="actions-dropdown" id="actions-${item.id}" role="menu" aria-label="Actions">
           <button role="menuitem" onclick="App.openEdit('${item.id}')">Modifier</button>
           <div class="divider"></div>
-          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'moodboard')">Moodboard</button>
-          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'proposition')">Proposition</button>
-          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'achete')">Marquer acheté</button>
+          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'a_voir')">À voir</button>
+          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'vu')">Marquer vu</button>
+          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'favori')">Favori</button>
           <div class="divider"></div>
           <button role="menuitem" class="danger" onclick="App.deleteItem('${item.id}')">Mettre à la corbeille</button>
         </div>`;
@@ -370,7 +350,7 @@ const App = (() => {
         : '';
 
       const footerHtml = isTrash ? '' : `<div class="card-footer">
-            <span class="status-pill ${sc[st]}">${statusLabels[st]}</span>
+            <span class="status-pill ${sc[st] || sc.a_voir}">${statusLabels[st] || statusLabels.a_voir}</span>
             ${buyer}
           </div>`;
 
@@ -408,9 +388,11 @@ const App = (() => {
   }
 
   function emptyStateHtml(filtered) {
-    const houseSvg = '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
-    const heading = filtered ? 'Aucun élément pour ce filtre' : 'Aucun élément';
-    return `<div class="empty-state"><div class="illustration">${houseSvg}</div><h3>${heading}</h3><p>Ajoutez votre première inspiration</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter au moodboard</button></div>`;
+    const gourdSvg = '<svg width="44" height="44" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 6h6M24 6v5M19.5 11.5c-1 3 .5 5-1.5 7.5C13 22 9 26.5 9 32c0 7 6.5 11 15 11s15-4 15-11c0-5.5-4-10-9-13-2-2.5-.5-4.5-1.500-7.5z"/><circle cx="18" cy="31" r="1.6" fill="currentColor"/><circle cx="24" cy="27" r="1.6" fill="currentColor"/><circle cx="30" cy="32" r="1.6" fill="currentColor"/><circle cx="24" cy="36" r="1.6" fill="currentColor"/><path d="M18 31l6-4 6 5-6 4z" stroke-width="1.2"/></svg>';
+    if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${gourdSvg}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
+    const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
+    const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';
+    return `<div class="empty-state"><div class="illustration">${gourdSvg}</div><h3>${heading}</h3><p>${hint}</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter un lien</button></div>`;
   }
 
   function showItemActions(e, id) {
@@ -454,9 +436,9 @@ const App = (() => {
 
   // ===== Add Item Modal =====
   function showAddItem() {
-    if (spaces.length === 0) { toast('Créez d\'abord un espace', 'error'); showAddSpace(); return; }
+    if (spaces.length === 0) { toast('Crée d\'abord une collection', 'error'); showAddSpace(); return; }
     const s = activeSpace !== 'all' ? spaces.find(x => x.id === activeSpace) : spaces[0];
-    document.getElementById('addItemTitle').textContent = 'Ajouter au moodboard';
+    document.getElementById('addItemTitle').textContent = 'Ajouter au journal';
     document.getElementById('addItemModal').classList.add('active');
     resetAddItemForm();
     const pre = (activeSpace !== 'all' && activeSpace !== 'trash') ? [activeSpace] : (s ? [s.id] : []);
@@ -464,28 +446,31 @@ const App = (() => {
   }
   function closeAddItem() { document.getElementById('addItemModal').classList.remove('active'); resetAddItemForm(); }
 
-  // Partage natif (Web Share Target, Android) : /share-target a stocké le média et/ou
-  // extrait le lien, puis redirigé vers /?share_... → on ouvre la modale d'ajout pré-remplie.
-  function handleSharedIntent() {
+  // Partage reçu d'une autre appli. Android : le service worker lit le partage, garde un éventuel
+  // fichier sur l'appareil, puis ouvre /?share_... . iPhone : un Raccourci ouvre /add?u=<lien>.
+  // Dans les deux cas on ouvre la fenêtre d'ajout pré-remplie.
+  async function handleSharedIntent() {
     if (sharedIntentHandled) return;
     const p = new URLSearchParams(location.search);
-    const shareUrl = p.get('share_url') || '';
+    const shareUrl = p.get('share_url') || (location.pathname === '/add' ? p.get('u') : '') || '';
     const shareTitle = p.get('share_title') || '';
     const shareText = p.get('share_text') || '';
     const shareMedia = p.get('share_media') || '';
     const shareKind = p.get('share_kind') || '';
     if (!shareUrl && !shareText && !shareMedia) return;
-    // Sécurité : share_media vient de l'URL (forgeable) → n'accepter qu'un chemin R2 interne sûr,
-    // sinon on ignore l'intention (empêche toute injection via un lien /?share_media=... piégé).
-    if (shareMedia && !/^\/images\/[A-Za-z0-9._-]+$/.test(shareMedia)) return;
+    // Sécurité : share_media vient de l'adresse (forgeable) → seul un identifiant de fichier local est accepté.
+    if (shareMedia && !/^[A-Za-z0-9-]{8,64}$/.test(shareMedia)) return;
     sharedIntentHandled = true;
 
     if (shareMedia) {
-      // Média déjà dans R2 → aperçu + on mémorise l'URL (submitItem NE ré-uploade PAS).
+      // Fichier déjà gardé sur l'appareil par le service worker → aperçu, sans le réenregistrer.
+      const localUrl = await Store.urlForMedia(shareMedia);
+      history.replaceState({}, '', '/');
+      if (!localUrl) { toast('Le fichier partagé est introuvable', 'error'); return; }
       showAddItem();
       switchModalTab('photo');
-      sharedMediaUrl = shareMedia;
-      sharedMediaKind = shareKind === 'video' ? 'video' : 'image';
+      sharedMediaUrl = localUrl;
+      sharedMediaKind = Store.kindOf(localUrl) === 'video' ? 'video' : 'image';
       const box = document.getElementById('photoPreview');
       // Construction par DOM (.src) plutôt qu'innerHTML : aucun contexte HTML injectable.
       box.textContent = '';
@@ -502,6 +487,7 @@ const App = (() => {
       switchModalTab('link');
       let url = shareUrl;
       if (!url && shareText) { const m = shareText.match(/https?:\/\/\S+/); if (m) url = m[0]; }
+      url = Store.safeLink(url); // seuls les liens http(s) sont acceptés
       if (url) document.getElementById('linkUrl').value = url;
       if (shareTitle) document.getElementById('linkTitle').value = shareTitle;
       else if (!url && shareText) document.getElementById('linkTitle').value = shareText;
@@ -548,8 +534,7 @@ const App = (() => {
       linkCanonicalUrl = data.canonical_url || '';
       document.getElementById('linkTitle').value = p.title || '';
       document.getElementById('linkDesc').value = p.description || '';
-      document.getElementById('linkPrice').value = p.price || '';
-      let imgHtml = p.image_url ? `<img src="${esc(p.image_url)}" alt="preview" onerror="this.style.display='none'">` : '';
+        let imgHtml = p.image_url ? `<img src="${esc(p.image_url)}" alt="preview" onerror="this.style.display='none'">` : '';
       let noteHtml = data.note ? `<div class="desc" style="color:var(--warning,#b45309)">${esc(data.note)}</div>` : '';
       preview.innerHTML = imgHtml + (p.title ? `<div class="desc">${esc(p.title)}</div>` : '') + noteHtml;
       if (!p.title && !p.image_url && !data.note) preview.innerHTML = '<div class="desc">Aucune info trouvée. Remplissez manuellement.</div>';
@@ -589,18 +574,17 @@ const App = (() => {
             type: 'link', url: linkCanonicalUrl || url, space_ids: cats,
             title: document.getElementById('linkTitle').value.trim(),
             description: document.getElementById('linkDesc').value.trim(),
-            price: document.getElementById('linkPrice').value.trim(),
             image_url: document.getElementById('linkPreview').querySelector('img')?.src || '',
           }
         });
       } else {
         const title = document.getElementById('photoTitle').value.trim();
         if (!title) { toast('Titre requis', 'error'); return; }
-        // Média partagé : déjà dans R2, pas de ré-upload. Sinon : upload streaming du fichier choisi.
+        // Fichier partagé : déjà sur l'appareil. Sinon : on enregistre le fichier choisi.
         let imageUrl = sharedMediaUrl;
         if (!imageUrl) {
           if (!mediaFile) { toast('Photo ou vidéo requise', 'error'); return; }
-          const media = await uploadMedia(mediaFile); // multipart streaming vers R2
+          const media = await uploadMedia(mediaFile);
           imageUrl = media.media_url;
         }
         await api('/api/spaces/' + cats[0] + '/items', {
@@ -608,13 +592,12 @@ const App = (() => {
             type: 'photo', title, space_ids: cats,
             description: document.getElementById('photoDesc').value.trim(),
             url: document.getElementById('photoUrl').value.trim(),
-            price: document.getElementById('photoPrice').value.trim(),
             image_url: imageUrl,
           }
         });
       }
       closeAddItem();
-      toast('Ajouté au moodboard');
+      toast('Ajouté au journal');
       await loadItems(); await loadSpaces();
     } catch (e) { toast(e.message, 'error'); }
     finally {
@@ -623,14 +606,88 @@ const App = (() => {
     }
   }
 
-  // Upload d'un média (image/vidéo) en multipart streaming. Renvoie { media_url, kind, ... }.
+  // Enregistre un média (image ou vidéo) sur l'appareil. Renvoie { media_url, kind }.
   async function uploadMedia(file) {
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch('/api/upload', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || `Upload échoué (${res.status})`);
-    return data;
+    const kind = file.type.startsWith('video/') ? 'video' : 'image';
+    if (kind === 'video' && file.size > 100 * 1024 * 1024) throw new Error('Vidéo trop lourde (100 Mo maximum)');
+    const m = await Store.saveMedia(file, kind);
+    return { media_url: m.url, kind: m.kind };
+  }
+
+  // ===== Coller un lien (voie universelle, la seule sans réglage sur iPhone) =====
+  async function pasteLink() {
+    try {
+      const clip = (await navigator.clipboard.readText()).trim();
+      const m = clip.match(/https?:\/\/\S+/);
+      const url = Store.safeLink(m ? m[0] : clip);
+      if (!url) { toast('Le presse-papiers ne contient pas de lien', 'error'); return; }
+      document.getElementById('linkUrl').value = url;
+      fetchLinkPreview();
+    } catch { toast('Lecture du presse-papiers refusée : colle le lien dans le champ', 'error'); }
+  }
+
+  // ===== Sauvegarde : export, envoi, import =====
+  const BACKUP_STALE_DAYS = 7;
+  async function refreshBackupHint() {
+    const last = await Store.lastBackupAt();
+    const total = spaces.reduce((n, s) => n + (s.item_count || 0), 0);
+    const days = last ? Math.floor((Date.now() - last) / 86400000) : null;
+    const stale = total > 0 && (days === null || days >= BACKUP_STALE_DAYS);
+    document.getElementById('backupBtn').classList.toggle('needs-backup', stale);
+    const status = document.getElementById('backupStatus');
+    status.classList.toggle('is-stale', stale);
+    status.textContent = days === null ? 'Aucune sauvegarde pour l’instant. Ton journal n’existe que sur cet appareil.'
+      : days === 0 ? 'Dernière sauvegarde : aujourd’hui.'
+      : `Dernière sauvegarde : il y a ${days} jour${days > 1 ? 's' : ''}.`;
+  }
+  function showBackup() {
+    const sel = document.getElementById('backupScope');
+    sel.replaceChildren(new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id)));
+    refreshBackupHint();
+    document.getElementById('backupModal').classList.add('active');
+  }
+  function closeBackup() { document.getElementById('backupModal').classList.remove('active'); }
+  function saveFileLocally(file) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+  let exporting = false;
+  async function runExport(send) {
+    if (exporting) return;
+    exporting = true;
+    document.querySelectorAll('#backupModal .backup-action').forEach(b => { b.disabled = true; });
+    try {
+      const { file, count, skippedVideos } = await Store.exportFile(document.getElementById('backupScope').value || null);
+      if (count === 0) { toast('Rien à sauvegarder dans cette sélection', 'error'); return; }
+      const note = skippedVideos ? ` (${skippedVideos} vidéo${skippedVideos > 1 ? 's' : ''} non incluse${skippedVideos > 1 ? 's' : ''})` : '';
+      if (send && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: 'Sauvegarde IAleket' }); toast(`${count} élément${count > 1 ? 's' : ''} envoyé${count > 1 ? 's' : ''}${note}`); }
+        catch (e) { if (e.name !== 'AbortError') { saveFileLocally(file); toast('Envoi impossible : fichier téléchargé à la place' + note); } }
+      } else {
+        saveFileLocally(file);
+        toast((send ? 'Envoi de fichier indisponible ici : ' : '') + `${count} élément${count > 1 ? 's' : ''} dans le fichier téléchargé${note}`);
+      }
+      refreshBackupHint();
+    } catch (e) { toast(e.message, 'error'); }
+    finally {
+      exporting = false;
+      document.querySelectorAll('#backupModal .backup-action').forEach(b => { b.disabled = false; });
+    }
+  }
+  const downloadBackup = () => runExport(false);
+  const shareBackup = () => runExport(true);
+  async function importBackup(input) {
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const { added, skipped } = await Store.importFile(file);
+      toast(`${added} ajouté${added > 1 ? 's' : ''}, ${skipped} ignoré${skipped > 1 ? 's' : ''} (déjà présents ou invalides)`);
+      closeBackup();
+      await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
   }
 
   // ===== Tags & filtre par tag =====
@@ -640,7 +697,7 @@ const App = (() => {
     let h; try { h = new URL(item.url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return 'divers'; }
     if (h.endsWith('tiktok.com')) return 'tiktok';
     if (h.endsWith('instagram.com')) return 'instagram';
-    if (h.endsWith('pinterest.com') || h === 'pin.it') return 'pinterest';
+    if (/(^|\.)pinterest\.[a-z.]+$/.test(h) || h === 'pin.it') return 'pinterest';
     if (h === 'x.com' || h.endsWith('twitter.com')) return 'twitter';
     if (h.endsWith('youtube.com') || h === 'youtu.be') return 'youtube';
     return 'divers';
@@ -662,7 +719,7 @@ const App = (() => {
   }
 
   // Tags perso (localStorage, par utilisateur) — s'affichent même sans item porteur.
-  function customTagsKey() { return 'hb:customTags:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
+  function customTagsKey() { return 'ialeket:customTags:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
   function getCustomTags() {
     try { const a = JSON.parse(localStorage.getItem(customTagsKey())); return Array.isArray(a) ? a.filter(t => typeof t === 'string') : []; }
     catch { return []; }
@@ -827,7 +884,7 @@ const App = (() => {
   }
 
   // Ordre des espaces (par utilisateur, localStorage). IDs inconnus → à la fin.
-  function spaceOrderKey() { return 'hb:spaceOrder:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
+  function spaceOrderKey() { return 'ialeket:spaceOrder:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
   function getSpaceOrder() {
     try { const a = JSON.parse(localStorage.getItem(spaceOrderKey())); return Array.isArray(a) ? a : []; }
     catch { return []; }
@@ -866,11 +923,12 @@ const App = (() => {
     const t = mk('div', 'toast toast-' + type);
     t.textContent = msg;
     c.appendChild(t);
-    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; t.style.transition = 'all 0.25s ease'; setTimeout(() => t.remove(), 250); }, 2600);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(8px)'; setTimeout(() => t.remove(), 200); }, 2600);
   }
 
   // ===== Utilities =====
-  function esc(str) { if (!str) return ''; const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+  // Échappe aussi les guillemets : la valeur est sûre dans du texte ET dans un attribut HTML.
+  function esc(str) { if (!str) return ''; return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function mk(tag, cls) { const el = document.createElement(tag); if (cls) el.className = cls; return el; }
 
   // ===== Init =====
@@ -881,16 +939,6 @@ const App = (() => {
       }).catch(() => {});
     });
   }
-
-  document.getElementById('loginForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const u = document.getElementById('loginUsername').value.trim();
-    const p = document.getElementById('loginPassword').value;
-    const err = document.getElementById('loginError');
-    if (!u || !p) return;
-    try { err.style.display = 'none'; await login(u, p); }
-    catch (ex) { err.textContent = ex.message; err.style.display = 'block'; }
-  });
 
   // Confirm dialog buttons
   document.getElementById('confirmOk').addEventListener('click', () => _closeConfirm(true));
@@ -934,9 +982,9 @@ const App = (() => {
 
   document.getElementById('spaceName').addEventListener('keydown', (e) => { if (e.key === 'Enter') createSpace(); });
 
-  checkSession();
+  start();
 
-  return { login, logout, checkSession, loadSpaces, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, pasteLink, showBackup, closeBackup, downloadBackup, shareBackup, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

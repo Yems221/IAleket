@@ -1,22 +1,5 @@
-name = "homeboard"
-compatibility_date = "2026-07-07"
-compatibility_flags = ["nodejs_compat"]
+# IAleket — aucun stockage serveur : ni base de données, ni fichiers.
+# Le serveur ne fait qu'une chose : aller chercher l'aperçu d'un lien.
+name = "ialeket"
+compatibility_date = "2026-05-01"
 pages_build_output_dir = "public"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "homeboard-db"
-database_id = "" # identifiant retiré : propre à chaque instance
-
-[[r2_buckets]]
-binding = "STORAGE"
-bucket_name = "homeboard-assets"
-
-# Cloudflare Browser Rendering — navigateur headless pour la preview des liens JS/anti-bot
-[browser]
-binding = "BROWSER"
-
-[vars]
-R2_PUBLIC_BASE_URL = ""
-# SETUP_KEY est un secret : défini via `wrangler pages secret put SETUP_KEY --project-name homeboard`
-# Ne jamais committer sa valeur ici.

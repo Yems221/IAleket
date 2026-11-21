@@ -1,27 +1,42 @@
 # IAleket
 
-Une calebasse de données : un journal de liens personnel, open source, qui reçoit les liens
-partagés depuis d'autres applis (X, Instagram, YouTube, TikTok, Pinterest…) et les garde
-sur l'appareil.
+Une calebasse de données : un journal de liens personnel et open source. Tu partages un lien depuis
+X, Instagram, YouTube, TikTok ou Pinterest, il devient une carte avec aperçu, et tout reste sur ton appareil.
 
-**État : conception.** Aucun code d'application ici pour l'instant.
+**État : première version, essayée sur ordinateur seulement.** Pas encore déployée ni testée sur téléphone.
+
+## Ce que fait cette version
+
+- Reçoit un lien, une image ou une vidéo partagés depuis une autre appli (Android), ou collés (partout).
+- Affiche chaque élément en carte, avec lecteur intégré pour YouTube, X, Instagram, TikTok et Pinterest.
+- Range par collections et par tags, avec un statut « À voir / Vu / Favori » et une corbeille de 30 jours.
+- Garde tout dans le navigateur de l'appareil : pas de compte, pas de base de données.
+- Sauvegarde le journal dans un fichier à s'envoyer (Telegram, Drive, e-mail) et à réimporter.
+
+Pas encore fait : export direct vers Google Drive, partage rapide depuis iPhone.
 
 ## Principes
 
-- Les données restent dans le stockage local de l'appareil : pas de compte, pas de base serveur.
-- Un petit serveur Cloudflare sans stockage sert l'app et va chercher les aperçus de liens.
-- L'export est la sauvegarde : fichier, Telegram par la feuille de partage, Google Drive (optionnel).
+- Les données restent sur l'appareil. Le serveur ne garde rien : il lit seulement le titre et l'image d'un lien.
+- La sauvegarde est la seule protection contre la perte du journal : l'app le rappelle.
 - Chacun peut déployer sa propre instance.
 
-## Prototype en cours
+## Lancer en local
 
-La branche `prototype/partage-ios` contient un prototype jetable qui répond à une question :
-par quel chemin un lien partagé arrive-t-il dans IAleket sur iPhone et sur Android, et dans
-quel stockage ? Son verdict sera consigné ici ; le code du prototype ne sera pas fusionné.
+    npm install
+    npm run dev      # http://localhost:8788
+    npm test
+
+## Documents
+
+- [Cahier des charges](docs/PRD.md) : problème, solution, décisions, questions ouvertes.
+- [Notes de design](docs/DESIGN.md) : revue des animations, états des composants.
 
 ## Origine
 
-IAleket reprend les idées de HomeBoard (moodboard collaboratif), sans ses comptes ni sa base.
+IAleket part d'une copie complète de HomeBoard (moodboard collaboratif), ajustée : sans comptes, sans base
+serveur, avec un stockage local et une sauvegarde par fichier. La branche `prototype/partage-ios` contient un
+banc d'essai jetable pour les tests de partage sur téléphone.
 
 ## Licence
 

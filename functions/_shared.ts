@@ -1,154 +1,92 @@
-// Shared crypto & utilities for HomeBoard API functions
+// IAleket — outils communs des fonctions serveur.
+// Le serveur ne garde rien : il lit l'aperçu d'un lien pour le compte de l'app, puis oublie.
 
-export async function sha256(input: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(input);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const salt = crypto.randomUUID();
-  const key = await crypto.subtle.importKey(
-    'raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: encoder.encode(salt), iterations: 100000, hash: 'SHA-256' },
-    key, 256
-  );
-  const hash = Array.from(new Uint8Array(bits))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `${salt}:${hash}`;
-}
-
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [salt, expectedHash] = stored.split(':');
-  if (!salt || !expectedHash) return false;
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: encoder.encode(salt), iterations: 100000, hash: 'SHA-256' },
-    key, 256
-  );
-  const actualHash = Array.from(new Uint8Array(bits))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  return actualHash === expectedHash;
-}
-
-export function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
+export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
   });
 }
 
-export function sessionCookie(token: string, maxAge: number): string {
-  return `session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+// 1re adresse http(s) d'un texte (les partages Instagram/TikTok mettent souvent le lien dans "text").
+export function firstUrl(text: string): string {
+  const m = String(text || '').match(/https?:\/\/\S+/);
+  return m ? m[0] : '';
 }
 
-export function clearSessionCookie(): string {
-  return 'session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0';
+// ---------------------------------------------------------------------------
+// Garde-fous : ce serveur va chercher des pages pour l'app. Sans compte, il ne doit
+// ni servir de relais à d'autres sites, ni pouvoir viser un réseau interne.
+// ---------------------------------------------------------------------------
+
+// Vrai si la demande vient de l'app elle-même (même origine), pas d'un autre site.
+export function sameOrigin(request: Request): boolean {
+  const site = request.headers.get('Sec-Fetch-Site');
+  if (site) return site === 'same-origin';
+  const origin = request.headers.get('Origin');
+  return !!origin && origin === new URL(request.url).origin;
 }
 
-// Types média autorisés (images + vidéos) : extension, catégorie, taille max (Mo).
-// Source unique partagée par l'upload classique (/api/upload) et le partage natif (/share-target).
-export const MEDIA_TYPES: Record<string, { ext: string; kind: 'image' | 'video'; max: number }> = {
-  'image/jpeg': { ext: 'jpg', kind: 'image', max: 15 },
-  'image/png': { ext: 'png', kind: 'image', max: 15 },
-  'image/webp': { ext: 'webp', kind: 'image', max: 15 },
-  'image/gif': { ext: 'gif', kind: 'image', max: 15 },
-  'image/avif': { ext: 'avif', kind: 'image', max: 15 },
-  'video/mp4': { ext: 'mp4', kind: 'video', max: 100 },
-  'video/quicktime': { ext: 'mov', kind: 'video', max: 100 },
-  'video/webm': { ext: 'webm', kind: 'video', max: 100 },
-};
-
-// Types
-export interface Env {
-  DB: D1Database;
-  STORAGE: R2Bucket;
-  R2_PUBLIC_BASE_URL: string;
-  SETUP_KEY: string;
-  // Cloudflare Browser Rendering binding (fallback pour les pages JS/anti-bot : Instagram, etc.)
-  BROWSER?: Fetcher;
-}
-
-export interface User {
-  id: string;
-  username: string;
-  display_name: string;
-}
-
-export interface Space {
-  id: string;
-  name: string;
-  slug: string;
-  sort_order: number;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  item_count?: number;
-}
-
-export interface Item {
-  id: string;
-  space_id: string;
-  type: 'link' | 'photo';
-  title: string;
-  description: string;
-  url: string;
-  image_url: string;
-  price: string;
-  status: 'moodboard' | 'proposition' | 'achete';
-  purchased_by: string | null;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  purchased_by_display_name?: string;
-  created_by_display_name?: string;
-  space_ids?: string[];
-}
-
-// ---- Helpers items / catégories / corbeille ------------------------------
-
-// Convertit space_ids_csv (GROUP_CONCAT) en tableau space_ids sur chaque ligne.
-export function withSpaceIds<T extends Record<string, unknown>>(row: T): T {
-  const csv = row['space_ids_csv'];
-  const out = { ...row } as Record<string, unknown>;
-  delete out['space_ids_csv'];
-  out['space_ids'] = csv ? String(csv).split(',').filter(Boolean) : [];
-  return out as T;
-}
-
-// image_url stockée = "/images/{key}" ; l'objet R2 = "uploads/{key}".
-export function r2KeyFromImageUrl(url: string | null | undefined): string | null {
-  if (!url || !url.startsWith('/images/')) return null;
-  return url.replace('/images/', 'uploads/');
-}
-
-// Purge définitive de la corbeille : items supprimés depuis > 30 jours (+ objets R2).
-export async function purgeOldTrash(env: Env): Promise<void> {
-  const res = await env.DB.prepare(
-    `SELECT id, image_url FROM items WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now','-30 days')`,
-  ).all();
-  const rows = (res.results || []) as { id: string; image_url: string }[];
-  if (!rows.length) return;
-
-  for (const r of rows) {
-    const key = r2KeyFromImageUrl(r.image_url);
-    if (key) {
-      try { await env.STORAGE.delete(key); } catch { /* ignore */ }
-    }
+// Renvoie l'adresse si elle désigne un site public en http(s), sinon null.
+export function publicHttpUrl(raw: string): URL | null {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
   }
-  const ids = rows.map((r) => r.id);
-  const ph = ids.map(() => '?').join(',');
-  await env.DB.prepare(`DELETE FROM item_spaces WHERE item_id IN (${ph})`).bind(...ids).run();
-  await env.DB.prepare(`DELETE FROM items WHERE id IN (${ph})`).bind(...ids).run();
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  if (u.username || u.password) return null;
+  if (u.port && u.port !== '80' && u.port !== '443') return null;
+  const host = u.hostname.toLowerCase();
+  if (!host.includes('.')) return null; // "localhost", noms internes sans domaine
+  if (/^[0-9.]+$/.test(host) || host.includes(':') || host.startsWith('[')) return null; // adresses IP
+  if (/\.(local|localhost|internal|lan|home|corp|test|invalid)$/.test(host)) return null;
+  return u;
+}
+
+// fetch qui suit les redirections à la main, en revérifiant chaque étape.
+export async function guardedFetch(raw: string, headers: Record<string, string>, timeoutMs = 8000): Promise<Response | null> {
+  let current = raw;
+  for (let hop = 0; hop < 4; hop++) {
+    const u = publicHttpUrl(current);
+    if (!u) return null;
+    const res = await fetch(u.toString(), { headers, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
+    if (res.status < 300 || res.status >= 400) return res;
+    const next = res.headers.get('Location');
+    if (!next) return null;
+    current = new URL(next, u).toString();
+  }
+  return null;
+}
+
+// Lit le corps d'une réponse sans dépasser une taille maximale. Au-delà : null, ou seulement
+// le début si truncate est vrai (utile pour une page web, dont les balises sont en tête).
+export async function readCapped(res: Response, maxBytes: number, truncate = false): Promise<Uint8Array | null> {
+  if (!res.body) return new Uint8Array();
+  const declared = Number(res.headers.get('Content-Length') || 0);
+  if (declared > maxBytes && !truncate) return null;
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (total + value.byteLength > maxBytes) {
+      await reader.cancel();
+      if (!truncate) return null;
+      chunks.push(value.subarray(0, maxBytes - total));
+      total = maxBytes;
+      break;
+    }
+    total += value.byteLength;
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
 }

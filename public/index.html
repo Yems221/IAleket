@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>IAleket — prototype de partage</title>
+  <meta name="theme-color" content="#1f1a14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="IAleket">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/proto.css">
+</head>
+<body>
+  <header>
+    <h1>IAleket</h1>
+    <p class="tag">Prototype jetable — sert à vérifier comment un lien partagé arrive ici.</p>
+  </header>
+
+  <main>
+    <p id="notice" class="notice" role="status" hidden></p>
+
+    <section>
+      <h2>1. Où suis-je ?</h2>
+      <p id="modeLine" class="big"></p>
+      <dl id="context"></dl>
+      <p class="hint">Le <strong>code de stockage</strong> est tiré au hasard à la première ouverture.
+        Si Safari et l'app installée affichent le même code, elles partagent leurs données.
+        S'il diffère, ce sont deux journaux séparés.</p>
+    </section>
+
+    <section>
+      <h2>2. Liens reçus ici (<span id="count">0</span>)</h2>
+      <ul id="items"></ul>
+      <p id="empty" class="hint">Aucun lien pour l'instant.</p>
+    </section>
+
+    <section>
+      <h2>3. Ajouter un lien</h2>
+      <button id="pasteBtn" type="button">Coller le lien du presse-papiers</button>
+      <form id="manualForm">
+        <label for="manualUrl">Ou saisir un lien</label>
+        <div class="row">
+          <input id="manualUrl" type="url" inputmode="url" placeholder="https://…" required>
+          <button type="submit">Ajouter</button>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <h2>4. Tester l'export vers Telegram</h2>
+      <p class="hint">Ouvre la feuille de partage avec un fichier. Choisis Telegram, puis « Messages enregistrés ».</p>
+      <div class="row">
+        <button id="shareHtml" type="button">Envoyer un .html</button>
+        <button id="shareJson" type="button" class="secondary">Envoyer un .json</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Raccourci iPhone</h2>
+      <p>Dans l'app Raccourcis, crée un raccourci « Envoyer à IAleket » (les libellés peuvent varier selon la version d'iOS) :</p>
+      <ol>
+        <li>Dans ses réglages, active l'affichage dans la feuille de partage et limite les types à « URL » et « Texte ».</li>
+        <li>Ajoute l'action d'encodage d'URL, appliquée à l'entrée du raccourci.</li>
+        <li>Ajoute l'action qui ouvre une URL, avec cette adresse suivie du texte encodé :</li>
+      </ol>
+      <p><code id="shortcutUrl"></code></p>
+      <button id="copyShortcut" type="button" class="secondary">Copier cette adresse</button>
+    </section>
+
+    <section>
+      <h2>Journal des événements</h2>
+      <ol id="log" reversed></ol>
+      <button id="clearBtn" type="button" class="danger">Tout effacer sur cet appareil</button>
+    </section>
+  </main>
+
+  <script src="/db.js"></script>
+  <script src="/proto.js"></script>
+</body>
+</html>

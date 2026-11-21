@@ -1,0 +1,12 @@
+{
+  "name": "ialeket-proto",
+  "private": true,
+  "description": "Prototype jetable : comment un lien partagé arrive dans IAleket sur iPhone et Android",
+  "scripts": {
+    "dev": "wrangler dev --port 8788",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.85.0"
+  }
+}

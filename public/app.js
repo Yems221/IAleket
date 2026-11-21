@@ -1,0 +1,944 @@
+// ===== HomeBoard v3 — Audited & Upgraded =====
+const App = (() => {
+  let currentUser = null;
+  let spaces = [];
+  let items = [];
+  let activeSpace = 'all';
+  let activeFilter = '';      // statut neutralisé : le statut reste une propriété d'item, plus de filtre global
+  let activeTag = '';         // filtre par tag (plateforme ou #hashtag) — cf. tagsOf()
+  let lastAutoFetched = '';   // dernière URL auto-récupérée (évite les doublons)
+  let _linkDebounce = null;
+  let activeModalTab = 'link';
+  let mediaFile = null; // File choisi (image ou vidéo) — uploadé en streaming, pas de base64
+  let mediaKind = 'image';
+  let linkCanonicalUrl = ''; // URL résolue par le serveur (liens courts TikTok → URL embarquable)
+  let sharedMediaUrl = null;      // média déjà stocké en R2 via /share-target (partage natif) → pas de ré-upload
+  let sharedMediaKind = 'image';  // 'image' | 'video' du média partagé
+  let sharedIntentHandled = false; // un seul traitement du partage par chargement de page
+  let confirmResolve = null;
+  let editingId = null;
+  let dragSession = null;      // session de réorganisation d'onglets d'espaces (drag)
+  let lastPointer = { x: 0, y: 0 };
+
+  // ===== API =====
+  async function api(path, { method = 'GET', body } = {}) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(path, opts);
+    const data = await res.json();
+    if (!res.ok && !data.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    return data;
+  }
+
+  // ===== Auth =====
+  async function login(username, password) {
+    const data = await api('/api/auth/login', { method: 'POST', body: { username, password } });
+    currentUser = data.user;
+    document.getElementById('userAvatar').textContent = currentUser.display_name[0].toUpperCase();
+    document.getElementById('userName').textContent = currentUser.display_name;
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('app').classList.add('active');
+    await loadSpaces();
+  }
+
+  async function logout() {
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
+    currentUser = null; spaces = []; items = [];
+    document.getElementById('app').classList.remove('active');
+    document.getElementById('loginPage').style.display = 'flex';
+  }
+
+  async function checkSession() {
+    try {
+      const data = await api('/api/auth/me');
+      if (data.ok) {
+        currentUser = data.user;
+        document.getElementById('userAvatar').textContent = currentUser.display_name[0].toUpperCase();
+        document.getElementById('userName').textContent = currentUser.display_name;
+        document.getElementById('loginPage').style.display = 'none';
+        document.getElementById('app').classList.add('active');
+        await loadSpaces();
+      }
+    } catch { document.getElementById('loginPage').style.display = 'flex'; }
+  }
+
+  // ===== Spaces =====
+  async function loadSpaces() {
+    const data = await api('/api/spaces');
+    spaces = data.spaces || [];
+    renderSpacesTabs();
+    await loadItems();
+    handleSharedIntent(); // partage natif reçu via /share-target → ouvre la modale pré-remplie (une fois)
+  }
+
+  function renderSpacesTabs() {
+    const bar = document.getElementById('spacesBar');
+    bar.querySelectorAll('.space-tab').forEach(el => el.remove());
+
+    const allTab = mk('button', 'space-tab' + (activeSpace === 'all' ? ' active' : ''));
+    allTab.setAttribute('role', 'tab');
+    allTab.setAttribute('aria-selected', activeSpace === 'all' ? 'true' : 'false');
+    allTab.dataset.space = 'all';
+    allTab.textContent = 'Tous';
+    allTab.onclick = () => setSpace('all');
+    bar.appendChild(allTab);
+
+    orderedSpaces().forEach(s => {
+      const tab = mk('button', 'space-tab' + (activeSpace === s.id ? ' active' : ''));
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', activeSpace === s.id ? 'true' : 'false');
+      tab.dataset.space = s.id;
+      tab.innerHTML = `${esc(s.name)} <span class="count">${s.item_count || 0}</span>`;
+      tab.onclick = () => setSpace(s.id);
+      // Appui long → réorganisation (drag). pointerdown mémorise la position de départ.
+      tab.addEventListener('pointerdown', (e) => { lastPointer.x = e.clientX; lastPointer.y = e.clientY; });
+      attachLongPress(tab, () => startReorder(tab, s.id));
+      bar.appendChild(tab);
+    });
+
+    const trashTab = mk('button', 'space-tab space-tab-trash' + (activeSpace === 'trash' ? ' active' : ''));
+    trashTab.setAttribute('role', 'tab');
+    trashTab.dataset.space = 'trash';
+    trashTab.innerHTML = '🗑 Corbeille';
+    trashTab.onclick = () => setSpace('trash');
+    bar.appendChild(trashTab);
+  }
+
+  function setSpace(id) { activeSpace = id; activeTag = ''; renderSpacesTabs(); loadItems(); }
+
+  async function createSpace() {
+    const name = document.getElementById('spaceName').value.trim();
+    if (!name) return;
+    try {
+      await api('/api/spaces', { method: 'POST', body: { name } });
+      document.getElementById('spaceName').value = '';
+      closeAddSpace();
+      await loadSpaces();
+      toast('Espace créé');
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  function showAddSpace() {
+    document.getElementById('addSpaceModal').classList.add('active');
+    setTimeout(() => document.getElementById('spaceName').focus(), 100);
+  }
+  function closeAddSpace() { document.getElementById('addSpaceModal').classList.remove('active'); document.getElementById('spaceName').value = ''; }
+
+  // ===== Items =====
+  async function loadItems() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < 8; i++) { grid.appendChild(mk('div', 'skeleton-card')); }
+    renderTagBar(); // réserve la barre de tags pendant le chargement (évite un saut de layout)
+
+    try {
+      let u;
+      if (activeSpace === 'trash') {
+        u = '/api/items?trash=1';
+      } else if (activeSpace === 'all') {
+        u = '/api/items';
+      } else {
+        u = '/api/spaces/' + activeSpace + '/items';
+      }
+      const d = await api(u);
+      items = d.items || [];
+      renderGrid();
+    } catch { grid.innerHTML = emptyStateHtml(); }
+  }
+
+  // Détecte une plateforme embarquable à partir de l'URL de l'item.
+  // Retourne { platform, src } ou null. L'iframe est construite à la demande (au clic).
+  function getEmbed(url) {
+    if (!url) return null;
+    let u; try { u = new URL(url); } catch { return null; }
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+    let m;
+    if (host.endsWith('tiktok.com') && (m = u.pathname.match(/\/(?:video|photo)\/(\d+)/)))
+      return { platform: 'tiktok', src: `https://www.tiktok.com/player/v1/${m[1]}` };
+    if (host.endsWith('instagram.com') && (m = u.pathname.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/)))
+      return { platform: 'instagram', src: `https://www.instagram.com/${m[1]}/${m[2]}/embed/` };
+    if ((host === 'x.com' || host.endsWith('twitter.com')) && (m = u.pathname.match(/\/status\/(\d+)/)))
+      return { platform: 'twitter', src: `https://platform.twitter.com/embed/Tweet.html?id=${m[1]}&theme=light&dnt=true` };
+    if (host.endsWith('youtube.com') && u.searchParams.get('v'))
+      return { platform: 'youtube', src: `https://www.youtube.com/embed/${u.searchParams.get('v')}` };
+    if (host === 'youtu.be' && u.pathname.length > 1)
+      return { platform: 'youtube', src: `https://www.youtube.com/embed/${u.pathname.slice(1)}` };
+    return null;
+  }
+
+  function openEmbed(id) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    const emb = getEmbed(item.url);
+    if (!emb) { window.open(item.url, '_blank', 'noopener'); return; }
+    const box = document.getElementById('embedBox');
+    box.className = 'embed-box embed-' + emb.platform;
+    box.innerHTML = `<iframe src="${esc(emb.src)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin" title="${esc(item.title || emb.platform)}"></iframe>`;
+    document.getElementById('embedTitle').textContent = item.title || '';
+    document.getElementById('embedOpenLink').href = item.url;
+    document.getElementById('embedModal').classList.add('active');
+  }
+
+  function closeEmbed() {
+    document.getElementById('embedModal').classList.remove('active');
+    document.getElementById('embedBox').innerHTML = ''; // stoppe la lecture (embed OU vidéo locale)
+  }
+
+  // Source unique : ce qui fait qu'un média uploadé est une vidéo (cf. MEDIA_TYPES côté serveur).
+  const isVideoUrl = (u) => /\.(mp4|mov|webm)$/i.test(u || '');
+
+  // Lecteur in-app (médias uploadés) — image OU vidéo, réutilise la lightbox des embeds
+  function openMedia(url, title) {
+    if (!url) return;
+    const isVid = isVideoUrl(url);
+    const box = document.getElementById('embedBox');
+    box.className = 'embed-box ' + (isVid ? 'embed-video' : 'embed-image');
+    // Construction par DOM (.src) plutôt qu'innerHTML : aucun contexte HTML injectable.
+    box.textContent = '';
+    const el = document.createElement(isVid ? 'video' : 'img');
+    el.src = url;
+    if (isVid) { el.controls = true; el.autoplay = true; el.playsInline = true; el.preload = 'metadata'; }
+    else { el.alt = title || 'Média'; }
+    box.appendChild(el);
+    document.getElementById('embedTitle').textContent = title || (isVid ? 'Vidéo' : 'Photo');
+    document.getElementById('embedOpenLink').href = url;
+    document.getElementById('embedModal').classList.add('active');
+  }
+
+  // ===== Catégories (cases à cocher) =====
+  function renderCatChecks(containerId, selectedIds) {
+    const sel = new Set(selectedIds || []);
+    document.getElementById(containerId).innerHTML = spaces.map(s =>
+      `<label class="cat-check"><input type="checkbox" value="${s.id}"${sel.has(s.id) ? ' checked' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>${esc(s.name)}</span></label>`
+    ).join('') || '<span class="hint">Aucune catégorie — créez-en une d\'abord.</span>';
+  }
+  function getCheckedCats(containerId) {
+    return [...document.querySelectorAll('#' + containerId + ' input:checked')].map(i => i.value);
+  }
+
+  // ===== Édition d'un item =====
+  function openEdit(id) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    editingId = id;
+    document.getElementById('actions-' + id)?.classList.remove('active');
+    document.getElementById('editTitle').value = item.title || '';
+    document.getElementById('editDesc').value = item.description || '';
+    document.getElementById('editPrice').value = item.price || '';
+    document.getElementById('editUrl').value = item.url || '';
+    document.getElementById('editUrlGroup').style.display = item.type === 'link' ? '' : 'none';
+    renderCatChecks('editItemCats', item.space_ids || []);
+    document.getElementById('editItemModal').classList.add('active');
+  }
+  function closeEdit() { document.getElementById('editItemModal').classList.remove('active'); editingId = null; }
+  async function submitEdit() {
+    if (!editingId) return;
+    const cats = getCheckedCats('editItemCats');
+    if (cats.length === 0) { toast('Choisis au moins une catégorie', 'error'); return; }
+    const btn = document.querySelector('#editItemModal .btn-primary');
+    if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+    try {
+      await api('/api/items/' + editingId, { method: 'PUT', body: {
+        title: document.getElementById('editTitle').value.trim(),
+        description: document.getElementById('editDesc').value.trim(),
+        price: document.getElementById('editPrice').value.trim(),
+        url: document.getElementById('editUrl').value.trim(),
+        space_ids: cats,
+      }});
+      closeEdit();
+      toast('Modifié');
+      await loadItems(); await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; } }
+  }
+
+  // ===== Corbeille =====
+  async function restoreItem(id) {
+    try {
+      await api('/api/items/' + id, { method: 'PUT', body: { restore: true } });
+      toast('Restauré'); await loadItems(); await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+  async function deleteForever(id) {
+    const ok = await showConfirm('Supprimer définitivement ? Action irréversible.');
+    if (!ok) return;
+    try {
+      await api('/api/items/' + id + '?permanent=1', { method: 'DELETE' });
+      toast('Supprimé définitivement'); await loadItems(); await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // Appui long (mobile + souris) → callback, en neutralisant le clic qui suit
+  function attachLongPress(el, cb) {
+    let timer = null, fired = false;
+    const start = () => { fired = false; timer = setTimeout(() => { fired = true; cb(); }, 500); };
+    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerup', cancel);
+    el.addEventListener('pointerleave', cancel);
+    el.addEventListener('pointercancel', cancel);
+    el.addEventListener('click', (e) => { if (fired) { e.stopImmediatePropagation(); e.preventDefault(); fired = false; } }, true);
+  }
+
+  function renderGrid() {
+    renderTagBar(); // les tags dépendent des items chargés — on rafraîchit la barre à chaque rendu
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    const visible = activeTag ? items.filter(it => tagsOf(it).includes(activeTag)) : items;
+    if (visible.length === 0) { grid.innerHTML = emptyStateHtml(activeTag); return; }
+
+    visible.forEach((item, idx) => {
+      const card = mk('div', 'card');
+      card.style.setProperty('--card-index', idx);
+      card.setAttribute('tabindex', '0');
+      card.setAttribute('role', 'article');
+      const spaceName = spaces.find(s => s.id === item.space_id)?.name || '';
+
+      // Lecteur intégré possible ? (TikTok, Instagram, X, YouTube)
+      const emb = item.type === 'link' ? getEmbed(item.url) : null;
+      const playSvg = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      const embedBadge = emb
+        ? `<div class="embed-badge embed-badge-${emb.platform}">${playSvg}<span>${emb.platform === 'twitter' ? 'X' : emb.platform}</span></div>`
+        : '';
+
+      // Média : image ou vidéo (les vidéos uploadées ont une extension vidéo)
+      const isVideo = item.type === 'photo' && isVideoUrl(item.image_url);
+      const isTrash = activeSpace === 'trash';
+      let mediaHtml = '';
+      if (item.image_url) {
+        mediaHtml = isVideo
+          ? `<video class="card-video" src="${esc(item.image_url)}#t=0.1" muted playsinline preload="metadata" onerror="var w=this.closest('.card-image-wrap'); if(w) w.remove()"></video>`
+          : `<img class="card-image" src="${esc(item.image_url)}" alt="${esc(item.title)}" loading="lazy" width="400" height="300" onerror="this.style.display='none'; var w=this.closest('.card-image-wrap'); var f=w&&w.querySelector('.card-play-facade'); if(f){f.style.display='flex'} else if(w){w.remove()}">`;
+      }
+      const linkIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+      const photoIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+      // Facade "play" quand un lecteur est possible mais sans miniature (pas de zone grise)
+      const bigPlay = '<svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      const facade = emb
+        ? `<div class="card-play-facade embed-badge-${emb.platform}"${item.image_url ? ' style="display:none"' : ''}>${bigPlay}</div>`
+        : '';
+      const videoBadge = isVideo ? `<div class="embed-badge embed-badge-video">${playSvg}<span>vidéo</span></div>` : '';
+      const hasVisual = !!(item.image_url || emb);
+
+      // Status
+      const st = item.status;
+      const statusLabels = { moodboard: 'Moodboard', proposition: 'Proposition', achete: 'Acheté' };
+      const sc = { moodboard: 'status-moodboard', proposition: 'status-proposition', achete: 'status-achete' };
+
+      let buyer = st === 'achete' && item.purchased_by_display_name
+        ? `<span class="card-buyer">par ${esc(item.purchased_by_display_name)}</span>` : '';
+
+      let priceHtml = item.price ? `<div class="card-price">${esc(item.price)}</div>` : '';
+
+      // Catégories multiples → puces
+      const catNames = (item.space_ids || []).map(sid => spaces.find(s => s.id === sid)?.name).filter(Boolean);
+      const catChips = catNames.length
+        ? `<div class="card-cats">${catNames.map(n => `<span class="cat-chip">${esc(n)}</span>`).join('')}</div>` : '';
+
+      let typeBadge = item.type === 'link'
+        ? `<span class="card-type-badge">${linkIcon} lien</span>`
+        : `<span class="card-type-badge">${photoIcon} ${isVideo ? 'vidéo' : 'photo'}</span>`;
+
+      const dotsSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+
+      let menuHtml;
+      if (isTrash) {
+        const dl = item.deleted_at
+          ? Math.max(0, 30 - Math.floor((Date.now() - new Date(item.deleted_at.replace(' ', 'T') + 'Z').getTime()) / 86400000))
+          : 30;
+        menuHtml = `<div class="trash-bar">
+          <span class="trash-note">Purge dans ${dl} j</span>
+          <button class="btn btn-xs btn-ghost" onclick="App.restoreItem('${item.id}')">Restaurer</button>
+          <button class="btn btn-xs btn-danger" onclick="App.deleteForever('${item.id}')">Supprimer</button>
+        </div>`;
+      } else {
+        menuHtml = `
+        <button class="card-menu-btn" onclick="App.showItemActions(event, '${item.id}')" aria-label="Actions pour ${esc(item.title)}" aria-haspopup="true">${dotsSvg}</button>
+        <div class="actions-dropdown" id="actions-${item.id}" role="menu" aria-label="Actions">
+          <button role="menuitem" onclick="App.openEdit('${item.id}')">Modifier</button>
+          <div class="divider"></div>
+          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'moodboard')">Moodboard</button>
+          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'proposition')">Proposition</button>
+          <button role="menuitem" onclick="App.changeStatus('${item.id}', 'achete')">Marquer acheté</button>
+          <div class="divider"></div>
+          <button role="menuitem" class="danger" onclick="App.deleteItem('${item.id}')">Mettre à la corbeille</button>
+        </div>`;
+      }
+
+      const imageWrapHtml = hasVisual
+        ? `<div class="card-image-wrap">${mediaHtml}${facade}${item.image_url && emb ? embedBadge : ''}${videoBadge}${typeBadge}</div>`
+        : '';
+
+      const footerHtml = isTrash ? '' : `<div class="card-footer">
+            <span class="status-pill ${sc[st]}">${statusLabels[st]}</span>
+            ${buyer}
+          </div>`;
+
+      card.innerHTML = `
+        ${imageWrapHtml}
+        ${menuHtml}
+        <div class="card-body">
+          ${catChips}
+          <div class="card-title">${esc(item.title)}</div>
+          <div class="card-desc">${esc(item.description)}</div>
+          ${priceHtml}
+          ${footerHtml}
+        </div>
+      `;
+
+      // Interactions (désactivées en corbeille)
+      if (!isTrash) {
+        // Média local (photo ou vidéo uploadée) → lightbox ; lien → embed sinon nouvel onglet.
+        const isLocalMedia = item.type === 'photo' && !!item.image_url;
+        if (isLocalMedia || (item.type === 'link' && item.url)) {
+          if (emb || isLocalMedia) card.classList.add('is-embeddable');
+          card.addEventListener('click', (e) => {
+            if (e.target.closest('.card-menu-btn') || e.target.closest('.actions-dropdown')) return;
+            if (isLocalMedia) openMedia(item.image_url, item.title);
+            else if (emb) openEmbed(item.id);
+            else window.open(item.url, '_blank', 'noopener');
+          });
+        }
+        // Appui long → panneau d'édition (mobile + souris)
+        attachLongPress(card, () => openEdit(item.id));
+      }
+
+      grid.appendChild(card);
+    });
+  }
+
+  function emptyStateHtml(filtered) {
+    const houseSvg = '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+    const heading = filtered ? 'Aucun élément pour ce filtre' : 'Aucun élément';
+    return `<div class="empty-state"><div class="illustration">${houseSvg}</div><h3>${heading}</h3><p>Ajoutez votre première inspiration</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter au moodboard</button></div>`;
+  }
+
+  function showItemActions(e, id) {
+    e.stopPropagation();
+    document.querySelectorAll('.actions-dropdown.active').forEach(d => d.classList.remove('active'));
+    document.getElementById('actions-' + id)?.classList.add('active');
+  }
+
+  async function changeStatus(id, newStatus) {
+    try {
+      await api('/api/items/' + id + '/status', { method: 'PATCH', body: { status: newStatus } });
+      document.getElementById('actions-' + id)?.classList.remove('active');
+      toast('Statut mis à jour');
+      await loadItems();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // Designed confirm dialog (replaces native confirm())
+  function showConfirm(msg) {
+    return new Promise((resolve) => {
+      confirmResolve = resolve;
+      document.getElementById('confirmMessage').textContent = msg;
+      document.getElementById('confirmDialog').classList.add('active');
+      document.getElementById('confirmCancel').focus();
+    });
+  }
+
+  function _closeConfirm(result) {
+    document.getElementById('confirmDialog').classList.remove('active');
+    if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+  }
+
+  async function deleteItem(id) {
+    try {
+      await api('/api/items/' + id, { method: 'DELETE' }); // suppression douce → corbeille
+      document.getElementById('actions-' + id)?.classList.remove('active');
+      toast('Déplacé dans la corbeille');
+      await loadItems(); await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // ===== Add Item Modal =====
+  function showAddItem() {
+    if (spaces.length === 0) { toast('Créez d\'abord un espace', 'error'); showAddSpace(); return; }
+    const s = activeSpace !== 'all' ? spaces.find(x => x.id === activeSpace) : spaces[0];
+    document.getElementById('addItemTitle').textContent = 'Ajouter au moodboard';
+    document.getElementById('addItemModal').classList.add('active');
+    resetAddItemForm();
+    const pre = (activeSpace !== 'all' && activeSpace !== 'trash') ? [activeSpace] : (s ? [s.id] : []);
+    renderCatChecks('addItemCats', pre);
+  }
+  function closeAddItem() { document.getElementById('addItemModal').classList.remove('active'); resetAddItemForm(); }
+
+  // Partage natif (Web Share Target, Android) : /share-target a stocké le média et/ou
+  // extrait le lien, puis redirigé vers /?share_... → on ouvre la modale d'ajout pré-remplie.
+  function handleSharedIntent() {
+    if (sharedIntentHandled) return;
+    const p = new URLSearchParams(location.search);
+    const shareUrl = p.get('share_url') || '';
+    const shareTitle = p.get('share_title') || '';
+    const shareText = p.get('share_text') || '';
+    const shareMedia = p.get('share_media') || '';
+    const shareKind = p.get('share_kind') || '';
+    if (!shareUrl && !shareText && !shareMedia) return;
+    // Sécurité : share_media vient de l'URL (forgeable) → n'accepter qu'un chemin R2 interne sûr,
+    // sinon on ignore l'intention (empêche toute injection via un lien /?share_media=... piégé).
+    if (shareMedia && !/^\/images\/[A-Za-z0-9._-]+$/.test(shareMedia)) return;
+    sharedIntentHandled = true;
+
+    if (shareMedia) {
+      // Média déjà dans R2 → aperçu + on mémorise l'URL (submitItem NE ré-uploade PAS).
+      showAddItem();
+      switchModalTab('photo');
+      sharedMediaUrl = shareMedia;
+      sharedMediaKind = shareKind === 'video' ? 'video' : 'image';
+      const box = document.getElementById('photoPreview');
+      // Construction par DOM (.src) plutôt qu'innerHTML : aucun contexte HTML injectable.
+      box.textContent = '';
+      const el = document.createElement(sharedMediaKind === 'video' ? 'video' : 'img');
+      el.src = sharedMediaUrl;
+      if (sharedMediaKind === 'video') { el.muted = true; el.playsInline = true; el.controls = true; el.preload = 'metadata'; }
+      else { el.alt = 'Aperçu du média partagé'; }
+      box.appendChild(el);
+      box.style.display = 'block';
+      setTimeout(() => document.getElementById('photoTitle').focus(), 100); // titre requis
+    } else {
+      // Lien (ou texte) → onglet lien, URL pré-remplie, auto-fetch de l'aperçu.
+      showAddItem();
+      switchModalTab('link');
+      let url = shareUrl;
+      if (!url && shareText) { const m = shareText.match(/https?:\/\/\S+/); if (m) url = m[0]; }
+      if (url) document.getElementById('linkUrl').value = url;
+      if (shareTitle) document.getElementById('linkTitle').value = shareTitle;
+      else if (!url && shareText) document.getElementById('linkTitle').value = shareText;
+      if (url) fetchLinkPreview();
+    }
+    history.replaceState({}, '', '/'); // nettoie l'URL → pas de re-déclenchement au refresh
+  }
+
+  function resetAddItemForm() {
+    ['linkUrl','linkTitle','linkDesc','linkPrice','photoTitle','photoDesc','photoUrl','photoPrice'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('linkPreview').style.display = 'none';
+    document.getElementById('linkPreview').innerHTML = '';
+    document.getElementById('photoFile').value = '';
+    document.getElementById('photoPreview').style.display = 'none';
+    mediaFile = null;
+    mediaKind = 'image';
+    sharedMediaUrl = null;
+    sharedMediaKind = 'image';
+    linkCanonicalUrl = '';
+    lastAutoFetched = '';
+    if (_linkDebounce) { clearTimeout(_linkDebounce); _linkDebounce = null; }
+    switchModalTab('link');
+  }
+
+  function switchModalTab(tab) {
+    activeModalTab = tab;
+    document.getElementById('tabLink').style.display = tab === 'link' ? '' : 'none';
+    document.getElementById('tabPhoto').style.display = tab === 'photo' ? '' : 'none';
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  }
+
+  async function fetchLinkPreview() {
+    const url = document.getElementById('linkUrl').value.trim();
+    if (!url) return;
+    // Annule un éventuel auto-fetch en attente pour éviter un double POST identique
+    if (_linkDebounce) { clearTimeout(_linkDebounce); _linkDebounce = null; }
+    lastAutoFetched = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+    const preview = document.getElementById('linkPreview');
+    preview.style.display = 'block';
+    preview.innerHTML = '<div style="text-align:center"><div class="spinner"></div></div>';
+    try {
+      const data = await api('/api/fetch-link', { method: 'POST', body: { url } });
+      const p = data.preview;
+      linkCanonicalUrl = data.canonical_url || '';
+      document.getElementById('linkTitle').value = p.title || '';
+      document.getElementById('linkDesc').value = p.description || '';
+      document.getElementById('linkPrice').value = p.price || '';
+      let imgHtml = p.image_url ? `<img src="${esc(p.image_url)}" alt="preview" onerror="this.style.display='none'">` : '';
+      let noteHtml = data.note ? `<div class="desc" style="color:var(--warning,#b45309)">${esc(data.note)}</div>` : '';
+      preview.innerHTML = imgHtml + (p.title ? `<div class="desc">${esc(p.title)}</div>` : '') + noteHtml;
+      if (!p.title && !p.image_url && !data.note) preview.innerHTML = '<div class="desc">Aucune info trouvée. Remplissez manuellement.</div>';
+    } catch (e) { preview.innerHTML = `<div class="desc" style="color:var(--danger)">${esc(e.message)}</div>`; }
+  }
+
+  function previewPhoto() {
+    const file = document.getElementById('photoFile').files[0];
+    if (!file) return;
+    mediaFile = file;
+    mediaKind = file.type.startsWith('video/') ? 'video' : 'image';
+    sharedMediaUrl = null; // l'utilisateur choisit son propre fichier → prime sur un média partagé
+    const box = document.getElementById('photoPreview');
+    // Aperçu local via un blob URL (léger, pas de base64 en mémoire)
+    const objUrl = URL.createObjectURL(file);
+    box.innerHTML = mediaKind === 'video'
+      ? `<video src="${objUrl}" muted playsinline controls preload="metadata"></video>`
+      : `<img src="${objUrl}" alt="Aperçu">`;
+    box.style.display = 'block';
+  }
+
+  let submitting = false;
+  async function submitItem() {
+    if (submitting) return; // garde anti double-soumission
+    const cats = getCheckedCats('addItemCats');
+    if (cats.length === 0) { toast('Choisis au moins une catégorie', 'error'); return; }
+
+    const btn = document.querySelector('#addItemModal .btn-primary');
+    submitting = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Ajout…'; }
+    try {
+      if (activeModalTab === 'link') {
+        const url = document.getElementById('linkUrl').value.trim();
+        if (!url) { toast('URL requise', 'error'); return; }
+        await api('/api/spaces/' + cats[0] + '/items', {
+          method: 'POST', body: {
+            type: 'link', url: linkCanonicalUrl || url, space_ids: cats,
+            title: document.getElementById('linkTitle').value.trim(),
+            description: document.getElementById('linkDesc').value.trim(),
+            price: document.getElementById('linkPrice').value.trim(),
+            image_url: document.getElementById('linkPreview').querySelector('img')?.src || '',
+          }
+        });
+      } else {
+        const title = document.getElementById('photoTitle').value.trim();
+        if (!title) { toast('Titre requis', 'error'); return; }
+        // Média partagé : déjà dans R2, pas de ré-upload. Sinon : upload streaming du fichier choisi.
+        let imageUrl = sharedMediaUrl;
+        if (!imageUrl) {
+          if (!mediaFile) { toast('Photo ou vidéo requise', 'error'); return; }
+          const media = await uploadMedia(mediaFile); // multipart streaming vers R2
+          imageUrl = media.media_url;
+        }
+        await api('/api/spaces/' + cats[0] + '/items', {
+          method: 'POST', body: {
+            type: 'photo', title, space_ids: cats,
+            description: document.getElementById('photoDesc').value.trim(),
+            url: document.getElementById('photoUrl').value.trim(),
+            price: document.getElementById('photoPrice').value.trim(),
+            image_url: imageUrl,
+          }
+        });
+      }
+      closeAddItem();
+      toast('Ajouté au moodboard');
+      await loadItems(); await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
+    finally {
+      submitting = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Ajouter'; }
+    }
+  }
+
+  // Upload d'un média (image/vidéo) en multipart streaming. Renvoie { media_url, kind, ... }.
+  async function uploadMedia(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || `Upload échoué (${res.status})`);
+    return data;
+  }
+
+  // ===== Tags & filtre par tag =====
+  // Type de plateforme d'un item (source des tags "plateforme")
+  function platformOf(item) {
+    if (item.type !== 'link' || !item.url) return 'divers';
+    let h; try { h = new URL(item.url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return 'divers'; }
+    if (h.endsWith('tiktok.com')) return 'tiktok';
+    if (h.endsWith('instagram.com')) return 'instagram';
+    if (h.endsWith('pinterest.com') || h === 'pin.it') return 'pinterest';
+    if (h === 'x.com' || h.endsWith('twitter.com')) return 'twitter';
+    if (h.endsWith('youtube.com') || h === 'youtu.be') return 'youtube';
+    return 'divers';
+  }
+
+  const PLATFORM_TAGS = new Set(['instagram', 'tiktok', 'pinterest', 'twitter', 'youtube']);
+  const PLATFORM_LABELS = { instagram: 'Instagram', tiktok: 'TikTok', pinterest: 'Pinterest', twitter: 'X', youtube: 'YouTube' };
+
+  // Tags d'un item : plateforme (hors "divers") + tous les #hashtags du titre ET de la description.
+  function tagsOf(item) {
+    const out = [];
+    const p = platformOf(item);
+    if (p && p !== 'divers') out.push(p);
+    const text = (item.title || '') + ' ' + (item.description || '');
+    const re = /#([\p{L}\p{N}_-]{1,30})/gu;
+    let m;
+    while ((m = re.exec(text))) out.push(m[1].toLowerCase());
+    return [...new Set(out)];
+  }
+
+  // Tags perso (localStorage, par utilisateur) — s'affichent même sans item porteur.
+  function customTagsKey() { return 'hb:customTags:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
+  function getCustomTags() {
+    try { const a = JSON.parse(localStorage.getItem(customTagsKey())); return Array.isArray(a) ? a.filter(t => typeof t === 'string') : []; }
+    catch { return []; }
+  }
+  function setCustomTags(arr) { try { localStorage.setItem(customTagsKey(), JSON.stringify(arr)); } catch {} }
+  function addCustomTag(tag) { const a = getCustomTags(); if (!a.includes(tag)) { a.push(tag); setCustomTags(a); } }
+  function removeCustomTag(tag) {
+    setCustomTags(getCustomTags().filter(t => t !== tag));
+    if (activeTag === tag) activeTag = '';
+    renderGrid();
+  }
+  // Normalise une saisie utilisateur en tag (# initial optionnel, minuscules, 1er token valide).
+  function normalizeTag(raw) {
+    const m = (raw || '').trim().replace(/^#+/, '').toLowerCase().match(/[\p{L}\p{N}_-]{1,30}/u);
+    return m ? m[0] : '';
+  }
+
+  function makeTagChip(tag, label, removable) {
+    const active = activeTag === tag;
+    const chip = mk('button', 'filter-chip' + (active ? ' active' : ''));
+    chip.type = 'button';
+    chip.dataset.tag = tag;
+    chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+    chip.textContent = label;
+    chip.addEventListener('click', () => setTagFilter(chip, tag));
+    if (removable) {
+      const x = mk('span', 'tag-remove');
+      x.textContent = '×';
+      x.setAttribute('aria-label', 'Retirer le tag ' + label);
+      x.addEventListener('click', (e) => { e.stopPropagation(); removeCustomTag(tag); });
+      chip.appendChild(x);
+    }
+    return chip;
+  }
+
+  // Reconstruit la barre : Tous + plateformes + #hashtags (triés) + tags perso (× retirable) + bouton "+".
+  function renderTagBar() {
+    const bar = document.getElementById('tagBar');
+    if (!bar) return;
+    const sl = bar.scrollLeft;
+    const custom = getCustomTags();
+    const customSet = new Set(custom);
+    const platformSet = new Set(), hashtagSet = new Set();
+    items.forEach(it => tagsOf(it).forEach(t => {
+      if (customSet.has(t)) return; // affiché comme puce perso (retirable) plus bas
+      (PLATFORM_TAGS.has(t) ? platformSet : hashtagSet).add(t);
+    }));
+
+    bar.innerHTML = '';
+    bar.appendChild(makeTagChip('', 'Tous', false));
+    [...platformSet].sort().forEach(t => bar.appendChild(makeTagChip(t, PLATFORM_LABELS[t] || t, false)));
+    [...hashtagSet].sort().forEach(t => bar.appendChild(makeTagChip(t, '#' + t, false)));
+    [...custom].sort().forEach(t => bar.appendChild(makeTagChip(t, '#' + t, true)));
+
+    const addBtn = mk('button', 'type-more-btn');
+    addBtn.type = 'button';
+    addBtn.setAttribute('aria-label', 'Nouveau tag');
+    addBtn.title = 'Nouveau tag';
+    addBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    addBtn.addEventListener('click', () => openTagInput(addBtn));
+    bar.appendChild(addBtn);
+
+    bar.scrollLeft = sl;
+  }
+
+  function setTagFilter(el, tag) {
+    activeTag = tag;
+    document.querySelectorAll('#tagBar .filter-chip').forEach(c => { c.classList.remove('active'); c.setAttribute('aria-pressed', 'false'); });
+    el.classList.add('active');
+    el.setAttribute('aria-pressed', 'true');
+    renderGrid(); // filtrage côté client, pas besoin de recharger
+  }
+
+  // Bouton "+" → champ inline. Entrée ajoute+persiste ; Échap/blur ferme.
+  function openTagInput(addBtn) {
+    const input = mk('input', 'tag-input');
+    input.type = 'text';
+    input.placeholder = 'Nouveau tag';
+    input.setAttribute('aria-label', 'Nom du nouveau tag');
+    input.maxLength = 30;
+    addBtn.replaceWith(input);
+    input.focus();
+    let done = false;
+    const commit = () => { if (done) return; done = true; const t = normalizeTag(input.value); if (t) addCustomTag(t); renderTagBar(); };
+    const cancel = () => { if (done) return; done = true; renderTagBar(); };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', commit);
+  }
+
+  // ===== Réorganisation des onglets d'espaces (drag, souris + tactile) =====
+  // Onglets déplaçables = espaces uniquement ("Tous" et "Corbeille" restent fixes).
+  function spaceTabEls() {
+    return [...document.querySelectorAll('#spacesBar .space-tab')].filter(t => t.dataset.space !== 'all' && t.dataset.space !== 'trash');
+  }
+  function computeDropIndex(clientX) {
+    const els = spaceTabEls();
+    for (let i = 0; i < els.length; i++) {
+      const r = els[i].getBoundingClientRect();
+      if (clientX < r.left + r.width / 2) return i;
+    }
+    return els.length;
+  }
+  function positionIndicator(clientX) {
+    if (!dragSession) return;
+    const wrap = document.getElementById('spacesBarWrap');
+    const els = spaceTabEls();
+    const idx = computeDropIndex(clientX);
+    const wr = wrap.getBoundingClientRect();
+    let screenX;
+    if (!els.length) screenX = clientX;
+    else if (idx >= els.length) screenX = els[els.length - 1].getBoundingClientRect().right;
+    else screenX = els[idx].getBoundingClientRect().left;
+    dragSession.indicator.style.left = (screenX - wr.left - 1) + 'px';
+    dragSession.dropIndex = idx;
+  }
+  function onReorderMove(e) {
+    if (!dragSession) return;
+    lastPointer.x = e.clientX; lastPointer.y = e.clientY;
+    positionIndicator(e.clientX);
+  }
+  function preventTouchScroll(e) { e.preventDefault(); } // bloque le scroll natif pendant le drag tactile
+  function startReorder(tabEl, id) {
+    if (dragSession) return;
+    const wrap = document.getElementById('spacesBarWrap');
+    if (!wrap) return;
+    const indicator = mk('div', 'space-drop-indicator');
+    wrap.appendChild(indicator);
+    dragSession = { id, tabEl, indicator, dropIndex: -1 };
+    tabEl.classList.add('dragging');
+    document.body.classList.add('reordering');
+    positionIndicator(lastPointer.x);
+    document.addEventListener('pointermove', onReorderMove);
+    document.addEventListener('pointerup', endReorder);
+    document.addEventListener('pointercancel', endReorder);
+    document.addEventListener('touchmove', preventTouchScroll, { passive: false });
+  }
+  function endReorder() {
+    if (!dragSession) return;
+    const { id, dropIndex } = dragSession;
+    cleanupReorder();
+    const displayed = orderedSpaces().map(s => s.id);
+    const from = displayed.indexOf(id);
+    if (from !== -1 && dropIndex >= 0) {
+      let target = dropIndex;
+      displayed.splice(from, 1);
+      if (from < target) target--;
+      displayed.splice(target, 0, id);
+      saveSpaceOrder(displayed);
+    }
+    renderSpacesTabs();
+  }
+  function cleanupReorder() {
+    document.removeEventListener('pointermove', onReorderMove);
+    document.removeEventListener('pointerup', endReorder);
+    document.removeEventListener('pointercancel', endReorder);
+    document.removeEventListener('touchmove', preventTouchScroll);
+    if (dragSession) { dragSession.tabEl.classList.remove('dragging'); dragSession.indicator.remove(); dragSession = null; }
+    document.body.classList.remove('reordering');
+  }
+
+  // Ordre des espaces (par utilisateur, localStorage). IDs inconnus → à la fin.
+  function spaceOrderKey() { return 'hb:spaceOrder:' + (currentUser && currentUser.id != null ? currentUser.id : 'anon'); }
+  function getSpaceOrder() {
+    try { const a = JSON.parse(localStorage.getItem(spaceOrderKey())); return Array.isArray(a) ? a : []; }
+    catch { return []; }
+  }
+  function saveSpaceOrder(ids) { try { localStorage.setItem(spaceOrderKey(), JSON.stringify(ids)); } catch {} }
+  function orderedSpaces() {
+    const saved = getSpaceOrder();
+    if (!saved.length) return spaces.slice();
+    const pos = new Map(saved.map((id, i) => [id, i]));
+    return spaces
+      .map((s, i) => ({ s, i, p: pos.has(s.id) ? pos.get(s.id) : Infinity }))
+      .sort((a, b) => (a.p - b.p) || (a.i - b.i))
+      .map(x => x.s);
+  }
+
+  // Auto-récupération : dès qu'une URL propre est saisie/collée, on lance le fetch (débounce)
+  function onLinkInput() {
+    const raw = document.getElementById('linkUrl').value.trim();
+    if (_linkDebounce) clearTimeout(_linkDebounce);
+    if (!isCleanUrl(raw)) return;
+    const norm = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
+    if (norm === lastAutoFetched) return;
+    _linkDebounce = setTimeout(() => { lastAutoFetched = norm; fetchLinkPreview(); }, 650);
+  }
+
+  function isCleanUrl(s) {
+    if (!s || /\s/.test(s)) return false;
+    const norm = /^https?:\/\//i.test(s) ? s : 'https://' + s;
+    try { const u = new URL(norm); return u.hostname.length > 3 && /\.[a-z]{2,}$/i.test(u.hostname); }
+    catch { return false; }
+  }
+
+  // ===== Toast =====
+  function toast(msg, type = 'success') {
+    const c = document.getElementById('toasts');
+    const t = mk('div', 'toast toast-' + type);
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; t.style.transition = 'all 0.25s ease'; setTimeout(() => t.remove(), 250); }, 2600);
+  }
+
+  // ===== Utilities =====
+  function esc(str) { if (!str) return ''; const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+  function mk(tag, cls) { const el = document.createElement(tag); if (cls) el.className = cls; return el; }
+
+  // ===== Init =====
+  // Register service worker for PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then(() => {
+      }).catch(() => {});
+    });
+  }
+
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const u = document.getElementById('loginUsername').value.trim();
+    const p = document.getElementById('loginPassword').value;
+    const err = document.getElementById('loginError');
+    if (!u || !p) return;
+    try { err.style.display = 'none'; await login(u, p); }
+    catch (ex) { err.textContent = ex.message; err.style.display = 'block'; }
+  });
+
+  // Confirm dialog buttons
+  document.getElementById('confirmOk').addEventListener('click', () => _closeConfirm(true));
+  document.getElementById('confirmCancel').addEventListener('click', () => _closeConfirm(false));
+  // Close confirm on overlay click
+  document.getElementById('confirmDialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) _closeConfirm(false); });
+
+  // Modal close on overlay click
+  document.querySelectorAll('.modal-overlay').forEach(ov => {
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov) {
+        ov.classList.remove('active');
+        if (ov.id === 'addItemModal') resetAddItemForm();
+        if (ov.id === 'addSpaceModal') document.getElementById('spaceName').value = '';
+        if (ov.id === 'embedModal') document.getElementById('embedBox').innerHTML = '';
+      }
+    });
+  });
+
+  // Escape closes modals + confirm (UI/UX Pro Max §1)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const confirm = document.getElementById('confirmDialog');
+      if (confirm.classList.contains('active')) { _closeConfirm(false); return; }
+      const openModal = document.querySelector('.modal-overlay.active');
+      if (openModal) {
+        openModal.classList.remove('active');
+        if (openModal.id === 'addItemModal') resetAddItemForm();
+        if (openModal.id === 'addSpaceModal') document.getElementById('spaceName').value = '';
+        if (openModal.id === 'embedModal') document.getElementById('embedBox').innerHTML = '';
+      }
+    }
+  });
+
+  // Close dropdowns on click outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.card-menu-btn') && !e.target.closest('.actions-dropdown')) {
+      document.querySelectorAll('.actions-dropdown.active').forEach(d => d.classList.remove('active'));
+    }
+  });
+
+  document.getElementById('spaceName').addEventListener('keydown', (e) => { if (e.key === 'Enter') createSpace(); });
+
+  checkSession();
+
+  return { login, logout, checkSession, loadSpaces, setSpace, createSpace, showAddSpace, closeAddSpace,
+    loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
+    showItemActions, changeStatus, deleteItem, onLinkInput,
+    openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,
+    setTagFilter, renderTagBar, tagsOf };
+})();

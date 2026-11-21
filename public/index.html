@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
+  <title>HomeBoard — Moodboard collaboratif</title>
+
+  <!-- Primary Meta -->
+  <meta name="description" content="Moodboard collaboratif pour projets d'aménagement intérieur">
+  <meta name="theme-color" content="#16A34A">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HomeBoard">
+
+  <!-- Icons -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+
+  <!-- Fonts -->
+  <link rel="stylesheet" href="/app.css?v=10">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+</head>
+<body>
+
+<!-- Skip link (UI/UX Pro Max §1) -->
+<a href="#main-content" class="sr-only" style="position:absolute;left:-9999px">Aller au contenu</a>
+
+<!-- ===== LOGIN PAGE (0 emoji, Sora display font) ===== -->
+<div id="loginPage" class="login-page">
+  <div class="login-card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </div>
+    <h1>HomeBoard</h1>
+    <p>Votre moodboard déco collaboratif</p>
+    <div id="loginError" class="login-error" style="display:none"></div>
+    <form id="loginForm" novalidate>
+      <div class="form-group">
+        <label for="loginUsername">Nom d'utilisateur</label>
+        <input type="text" id="loginUsername" placeholder="yems" autocomplete="username" required>
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">Mot de passe</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg">Se connecter</button>
+    </form>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div id="app" class="app">
+  <nav class="navbar" role="navigation" aria-label="Navigation principale">
+    <div class="navbar-brand" aria-label="HomeBoard"><span class="dot"></span> HomeBoard</div>
+    <div class="navbar-right">
+      <div class="navbar-user">
+        <div class="avatar" id="userAvatar" aria-hidden="true">?</div>
+        <span id="userName"></span>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="App.logout()">Déconnexion</button>
+    </div>
+  </nav>
+
+  <!-- Spaces tabs -->
+  <div class="spaces-bar" role="tablist" aria-label="Espaces" id="spacesBarWrap">
+    <button class="space-tab-add" onclick="App.showAddSpace()" aria-label="Ajouter un espace" title="Ajouter un espace">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="spaces-bar-scroll" id="spacesBar"></div>
+  </div>
+
+  <!-- Toolbar : filtre par tags (plateformes + #hashtags + tags perso), rendu par renderTagBar() -->
+  <div class="toolbar">
+    <div class="type-bar" id="tagBar" role="group" aria-label="Filtrer par tag"></div>
+  </div>
+
+  <!-- Content -->
+  <main class="content-area" id="main-content">
+    <div class="masonry" id="grid"></div>
+  </main>
+
+  <button class="fab" onclick="App.showAddItem()" aria-label="Ajouter un élément" title="Ajouter">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+</div>
+
+<!-- ===== ADD ITEM MODAL (with close button + escape) ===== -->
+<div class="modal-overlay" id="addItemModal" role="dialog" aria-modal="true" aria-label="Ajouter un élément">
+  <div class="modal">
+    <button class="modal-close" onclick="App.closeAddItem()" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <h2 id="addItemTitle">Ajouter à l'espace</h2>
+    <div class="modal-tabs" role="tablist">
+      <button class="modal-tab active" data-tab="link" onclick="App.switchModalTab('link')" role="tab" aria-selected="true">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Lien
+      </button>
+      <button class="modal-tab" data-tab="photo" onclick="App.switchModalTab('photo')" role="tab" aria-selected="false">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        Photo
+      </button>
+    </div>
+    <div class="modal-body" id="tabLink">
+      <div class="form-group"><label for="linkUrl">URL du produit ou inspiration</label><input type="url" id="linkUrl" oninput="App.onLinkInput()" placeholder="https://www.ikea.fr/p/canape-xxx" inputmode="url" autocomplete="off" spellcheck="false"></div>
+      <button class="btn btn-sm btn-ghost fetch-btn" onclick="App.fetchLinkPreview()">Récupérer les infos</button>
+      <div class="link-preview" id="linkPreview" style="display:none"></div>
+      <div class="form-group"><label for="linkTitle">Titre</label><input type="text" id="linkTitle" placeholder="Titre de l'élément"></div>
+      <div class="form-group"><label for="linkDesc">Description</label><textarea id="linkDesc" placeholder="Description..." rows="2"></textarea></div>
+      <div class="form-group"><label for="linkPrice">Prix (optionnel)</label><input type="text" id="linkPrice" placeholder="249€ ou 150 000 FCFA"></div>
+    </div>
+    <div class="modal-body" id="tabPhoto" style="display:none">
+      <label class="file-input-wrapper">
+        <input type="file" id="photoFile" accept="image/*,video/*" onchange="App.previewPhoto()">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+        <p>Cliquez ou glissez une photo ou une vidéo</p>
+      </label>
+      <div id="photoPreview" style="display:none"></div>
+      <div class="form-group"><label for="photoTitle">Titre *</label><input type="text" id="photoTitle" placeholder="Canapé KIVIK" required></div>
+      <div class="form-group"><label for="photoDesc">Description</label><textarea id="photoDesc" placeholder="Canapé 3 places..." rows="2"></textarea></div>
+      <div class="form-group"><label for="photoUrl">Lien d'achat (optionnel)</label><input type="url" id="photoUrl" placeholder="https://..."></div>
+      <div class="form-group"><label for="photoPrice">Prix (optionnel)</label><input type="text" id="photoPrice" placeholder="249€"></div>
+    </div>
+    <div class="form-group">
+      <label>Catégories <span class="hint">(une ou plusieurs)</span></label>
+      <div class="cat-checks" id="addItemCats"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-ghost" onclick="App.closeAddItem()">Annuler</button>
+      <button class="btn btn-sm btn-primary" onclick="App.submitItem()">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== EDIT ITEM MODAL ===== -->
+<div class="modal-overlay" id="editItemModal" role="dialog" aria-modal="true" aria-label="Modifier l'élément">
+  <div class="modal">
+    <button class="modal-close" onclick="App.closeEdit()" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <h2>Modifier l'élément</h2>
+    <div class="modal-body">
+      <div class="form-group"><label for="editTitle">Titre</label><input type="text" id="editTitle"></div>
+      <div class="form-group"><label for="editDesc">Description</label><textarea id="editDesc" rows="2"></textarea></div>
+      <div class="form-group" id="editUrlGroup"><label for="editUrl">Lien</label><input type="url" id="editUrl"></div>
+      <div class="form-group"><label for="editPrice">Prix (optionnel)</label><input type="text" id="editPrice"></div>
+      <div class="form-group">
+        <label>Catégories <span class="hint">(une ou plusieurs)</span></label>
+        <div class="cat-checks" id="editItemCats"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-ghost" onclick="App.closeEdit()">Annuler</button>
+      <button class="btn btn-sm btn-primary" onclick="App.submitEdit()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ADD SPACE MODAL ===== -->
+<div class="modal-overlay" id="addSpaceModal" role="dialog" aria-modal="true" aria-label="Nouvel espace">
+  <div class="modal">
+    <button class="modal-close" onclick="App.closeAddSpace()" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <h2>Nouvel espace</h2>
+    <div class="form-group">
+      <label for="spaceName">Nom de la pièce</label>
+      <input type="text" id="spaceName" placeholder="Salon, Cuisine, Chambre parents...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-ghost" onclick="App.closeAddSpace()">Annuler</button>
+      <button class="btn btn-sm btn-primary" onclick="App.createSpace()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CONFIRMATION DIALOG ===== -->
+<div class="confirm-overlay" id="confirmDialog" role="alertdialog" aria-modal="true">
+  <div class="confirm-dialog">
+    <p id="confirmMessage"></p>
+    <div class="btns">
+      <button class="btn btn-sm btn-ghost" id="confirmCancel">Annuler</button>
+      <button class="btn btn-sm btn-danger" id="confirmOk">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LIGHTBOX EMBED (lecteur intégré : TikTok, Instagram, X, YouTube) ===== -->
+<div class="modal-overlay embed-overlay" id="embedModal" role="dialog" aria-modal="true" aria-label="Aperçu du contenu">
+  <div class="embed-shell">
+    <div class="embed-header">
+      <span class="embed-title" id="embedTitle"></span>
+      <a class="embed-open" id="embedOpenLink" href="#" target="_blank" rel="noopener" aria-label="Ouvrir dans un nouvel onglet">Ouvrir ↗</a>
+      <button class="embed-close" onclick="App.closeEmbed()" aria-label="Fermer">✕</button>
+    </div>
+    <div class="embed-box" id="embedBox"></div>
+  </div>
+</div>
+
+<!-- ===== TOAST (aria-live) ===== -->
+<div class="toast-container" id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+<script src="/app.js?v=10"></script>
+</body>
+</html>

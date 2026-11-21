@@ -1,0 +1,16 @@
+{
+  "name": "homeboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Moodboard collaboratif déco/immo — Pinterest-like",
+  "scripts": {
+    "deploy": "wrangler pages deploy public/",
+    "db:init": "wrangler d1 execute homeboard-db --file=db/schema.sql"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.0.2"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

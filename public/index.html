@@ -166,7 +166,8 @@
       <select id="backupScope"></select>
     </div>
     <div class="backup-actions">
-      <button type="button" class="btn btn-primary backup-action" onclick="App.shareBackup()">Envoyer (Telegram, Drive, e-mail…)</button>
+      <button type="button" class="btn btn-primary backup-action" id="driveBackupBtn" onclick="App.driveBackup()" hidden>Sauvegarder dans Google Drive</button>
+      <button type="button" class="btn btn-ghost backup-action" id="shareBackupBtn" onclick="App.shareBackup()">Envoyer (Telegram, e-mail…)</button>
       <button type="button" class="btn btn-ghost backup-action" onclick="App.downloadBackup()">Télécharger le fichier</button>
     </div>
     <p class="hint">Les vidéos ne sont pas incluses dans le fichier.</p>
@@ -206,6 +207,7 @@
 
 <script src="/idb.js?v=1"></script>
 <script src="/store.js?v=1"></script>
-<script src="/app.js?v=3"></script>
+<script src="/drive.js?v=1"></script>
+<script src="/app.js?v=4"></script>
 </body>
 </html>

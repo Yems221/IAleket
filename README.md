@@ -15,7 +15,9 @@ X, Instagram, YouTube, TikTok ou Pinterest, il devient une carte avec aperçu, e
 - Garde tout dans le navigateur de l'appareil : pas de compte, pas de base de données.
 - Sauvegarde le journal dans un fichier à s'envoyer (Telegram, Drive, e-mail) et à réimporter.
 
-Pas encore fait : export direct vers Google Drive, partage rapide depuis iPhone.
+- Sauvegarde dans Google Drive, d'un toucher, si l'instance a son identifiant Google ([guide](docs/GOOGLE_DRIVE.md)).
+
+Pas encore fait : partage rapide depuis iPhone.
 
 ## Principes
 
@@ -33,6 +35,7 @@ Pas encore fait : export direct vers Google Drive, partage rapide depuis iPhone.
 
 - [Cahier des charges](docs/PRD.md) : problème, solution, décisions, questions ouvertes.
 - [Notes de design](docs/DESIGN.md) : revue des animations, états des composants.
+- [Sauvegarde Google Drive](docs/GOOGLE_DRIVE.md) : créer l'identifiant Google de ton instance.
 
 ## Origine
 

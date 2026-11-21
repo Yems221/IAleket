@@ -3,3 +3,8 @@
 name = "leketia"
 compatibility_date = "2026-05-01"
 pages_build_output_dir = "public"
+
+[vars]
+# Identifiant Google de cette instance, pour la sauvegarde dans Google Drive (public, pas un secret).
+# Chaque instance crée le sien : voir docs/GOOGLE_DRIVE.md. Vide = bouton Drive masqué.
+GOOGLE_CLIENT_ID = ""

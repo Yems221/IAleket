@@ -635,7 +635,14 @@ const App = (() => {
       : days === 0 ? 'Dernière sauvegarde : aujourd’hui.'
       : `Dernière sauvegarde : il y a ${days} jour${days > 1 ? 's' : ''}.`;
   }
+  // Le bouton Drive n'apparaît que si l'instance a son identifiant Google ; il passe alors en premier.
+  async function refreshDriveButton() {
+    const on = await Drive.available();
+    document.getElementById('driveBackupBtn').hidden = !on;
+    document.getElementById('shareBackupBtn').className = 'btn backup-action ' + (on ? 'btn-ghost' : 'btn-primary');
+  }
   function showBackup() {
+    refreshDriveButton();
     const sel = document.getElementById('backupScope');
     sel.replaceChildren(new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id)));
     refreshBackupHint();
@@ -665,6 +672,23 @@ const App = (() => {
         toast((send ? 'Envoi de fichier indisponible ici : ' : '') + `${count} élément${count > 1 ? 's' : ''} dans le fichier téléchargé${note}`);
       }
       refreshBackupHint();
+    } catch (e) { toast(e.message, 'error'); }
+    finally {
+      exporting = false;
+      document.querySelectorAll('#backupModal .backup-action').forEach(b => { b.disabled = false; });
+    }
+  }
+  async function driveBackup() {
+    if (exporting) return;
+    exporting = true;
+    document.querySelectorAll('#backupModal .backup-action').forEach(b => { b.disabled = true; });
+    try {
+      const { file, count, skippedVideos } = await Store.exportFile(document.getElementById('backupScope').value || null);
+      if (count === 0) { toast('Rien à sauvegarder dans cette sélection', 'error'); return; }
+      const sent = await Drive.save(file);
+      const note = skippedVideos ? ` (vidéos non incluses)` : '';
+      toast(`${count} élément${count > 1 ? 's' : ''} sauvegardé${count > 1 ? 's' : ''} dans Google Drive, dossier « leketia »${note}`);
+      if (sent.link) document.getElementById('backupStatus').textContent = `Dernière sauvegarde : aujourd’hui, ${sent.name}.`;
     } catch (e) { toast(e.message, 'error'); }
     finally {
       exporting = false;
@@ -979,7 +1003,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, pasteLink, showBackup, closeBackup, downloadBackup, shareBackup, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, pasteLink, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

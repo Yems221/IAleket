@@ -54,27 +54,34 @@ coin (`transform-origin: top right`, 120 ms), fenêtres en 200 ms, mouvement ré
 
 ## Logo (21 novembre 2026)
 
-Consignes : une vraie calebasse, vue de profil, une seule couleur, reconnaissable, moderne, imprimable,
-réaliste et post-moderne, remplie de quelque chose qui représente la donnée (pas de 0 et de 1).
+Démarche reprise après trois propositions refusées, en suivant la recherche
+[docs/recherche/logo-leketia.md](recherche/logo-leketia.md) : idée unique, croquis noir sur blanc testés
+jusqu'à 16 px, choix d'une silhouette, puis seulement la matière.
 
-- **Idée :** la calebasse est pleine à ras bord. En bas, la courbe lisse du fruit ; en haut, la même courbe
-  en escalier, faite de cubes, comme des pixels. Deux cubes s'en détachent au sommet.
-- **Fabrication :** modelé en 3D avec three.js (`tools/logo/`), puis rendu en images fixes.
-- **Deux versions :** réaliste (une seule teinte, terre cuite `#B4571B`, lumière et relief) et à plat
-  (une couleur, vue exactement de côté, pour l'impression et les petites tailles).
-- **Fichiers :** `public/brand/leketia-logo.png` et `leketia-logo-print.png` (2048 px, fond transparent),
-  `public/icons/` (icônes d'écran d'accueil), `public/brand/leketia-mark.webp` (barre du haut).
-- **Écartés :** les chiffres 0 et 1 (refusés) ; un pictogramme vectoriel (pas assez réaliste) ; un tas de
-  cubes multicolores sur un disque (trop de couleurs) ; des cubes empilés en escalier au-dessus du bol
-  (trop proche du logo de Docker).
-- **Pas encore fait :** une version vectorielle (SVG) de la version à plat, pour l'impression en grand.
+- **Piste retenue : A3, « le leket gravé », puis précisée par la porteuse :** le mot « leket » écrit en bits et
+  posé sur la calebasse, couleur bleu roi.
+- **Le code :** une rangée par lettre, ASCII sur 7 bits (l 1101100 · e 1100101 · k 1101011 · e 1100101 ·
+  t 1110100), soit une grille de 7 × 5 sur la panse. Un 1 est un carré gravé, un 0 reste bleu.
+  Définition unique : `tools/logo/leket-bits.js`.
+- **Matière :** comme sur les calebasses peules, la peau est teinte puis gravée ; la gravure enlève la teinture
+  et montre la chair claire. Bleu roi `#1F4BC9`, chair `#F3E3C3`.
+- **Fichiers :** `public/brand/leketia-logo.svg` (bleu roi), `leketia-logo-mono.svg` (une couleur, suit le texte,
+  pour l'impression), `leketia-favicon.svg` (sous 48 px : trois gros carrés, les 35 bits s'y fondraient),
+  `leketia-logo.png` (rendu réaliste three.js, 2048 px), `leketia-mark.webp` (barre du haut). Les SVG se
+  régénèrent avec `node tools/logo/build-svg.mjs`, le rendu avec `node tools/logo/server.mjs`.
+- **Couleur de l'app :** l'accent passe du terre cuite au bleu roi du logo.
+- **Planches de travail :** `tools/logo/esquisses-a.html`, `esquisses-b.html`, `a3.html`, `leket-bits.html`.
+- **Écartés :** les chiffres 0 et 1 ; les cubes (territoire de Docker) ; la terre cuite (une calebasse est une
+  écorce de fruit) ; les effets figés avant d'avoir une silhouette.
+- **Reste à faire :** recherche de marques déposées (OAPI, EUIPO, INPI, USPTO) avant toute diffusion publique ;
+  calques séparés pour l'icône iOS 26 si une app native voit le jour.
 
 ## Mise en page (21 novembre 2026)
 
 | Before | After | Why |
 | --- | --- | --- |
 | Barre du haut en verre dépoli, ombre intérieure | Fond de la page, flou léger, sans trait ni ombre | Moins de cadres : le contenu commence plus haut |
-| Logo dessiné au trait, nom « IAleket » | Logo à plat 32 px, nom « leketia » en minuscules | Le logo réaliste devient une tache à 32 px ; la version à plat reste lisible |
+| Logo dessiné au trait, nom « IAleket » | Leket gravé réaliste en 40 px, nom « leketia » en minuscules | La silhouette validée reste lisible petit ; le nom suit la graphie demandée |
 | Collections en pastilles noires pleines | Onglets texte, soulignement de 2 px qui s'étire en 200 ms | Un seul repère actif, plus calme ; l'animation montre d'où vient la sélection |
 | Filtres en pastilles de 40 px | Pastilles de 32 px, fond transparent | Secondaires par rapport aux collections : ils doivent peser moins |
 | Badge « lien » sur chaque image | Retiré | Information inutile : presque tout est un lien |

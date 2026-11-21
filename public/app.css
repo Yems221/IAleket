@@ -1,4 +1,4 @@
-/* ===== leketia — styles repris de HomeBoard, palette calebasse ===== */
+/* ===== leketia — styles repris de HomeBoard, bleu roi de la calebasse ===== */
 /* Audited against: UI/UX Pro Max (99 rules), Frontend-Design, Taste-Skill */
 /* 0 emojis, staggered reveals, liquid glass, grain texture, spring physics */
 
@@ -15,10 +15,10 @@
   --border-light: #e7e5e4;
   --border-strong: #d6d3d1;
 
-  --accent: #B4571B;
-  --accent-hover: #964514;
-  --accent-soft: #fdf3e7;
-  --accent-light: #f9e2c7;
+  --accent: #1F4BC9;
+  --accent-hover: #173AA0;
+  --accent-soft: #eef2fd;
+  --accent-light: #d9e2fa;
 
   --info: #3B82F6;
   --info-soft: #eff6ff;
@@ -115,9 +115,9 @@ body::after {
 .btn:active { transform: scale(0.97); }
 .btn-primary {
   background: var(--accent); color: white;
-  box-shadow: 0 1px 2px rgba(180,87,27,0.15);
+  box-shadow: 0 1px 2px rgba(31,75,201,0.15);
 }
-.btn-primary:hover { background: var(--accent-hover); box-shadow: 0 2px 8px rgba(180,87,27,0.25); }
+.btn-primary:hover { background: var(--accent-hover); box-shadow: 0 2px 8px rgba(31,75,201,0.25); }
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .btn-lg { padding: 13px 28px; font-size: 15px; border-radius: var(--r-md); width: 100%; }
 .btn-sm { padding: 7px 14px; font-size: 12px; border-radius: var(--r-sm); }
@@ -156,7 +156,7 @@ body::after {
 .form-group input::placeholder, .form-group textarea::placeholder { color: var(--ink-muted); }
 .form-group input:focus, .form-group textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(180,87,27,0.1);
+  box-shadow: 0 0 0 3px rgba(31,75,201,0.1);
 }
 
 /* ===== MAIN APP ===== */
@@ -278,7 +278,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   border: 1px solid var(--accent);
   background: var(--surface-elevated); color: var(--ink);
   font-size: 11px; font-weight: 500; font-family: var(--font);
-  outline: none; box-shadow: 0 0 0 3px rgba(180,87,27,0.1);
+  outline: none; box-shadow: 0 0 0 3px rgba(31,75,201,0.1);
 }
 .tag-input::placeholder { color: var(--ink-muted); }
 
@@ -290,13 +290,13 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   border: none; border-radius: var(--r-full);
   background: var(--accent); color: #fff;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(180,87,27,0.32), 0 2px 6px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 14px rgba(31,75,201,0.32), 0 2px 6px rgba(0,0,0,0.12);
   transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .fab svg { width: 24px; height: 24px; }
-.fab:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(180,87,27,0.40), 0 3px 8px rgba(0,0,0,0.14); }
+.fab:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(31,75,201,0.40), 0 3px 8px rgba(0,0,0,0.14); }
 .fab:active { transform: scale(0.94); }
-.fab:focus-visible { outline: none; box-shadow: 0 4px 14px rgba(180,87,27,0.32), 0 0 0 3px var(--surface), 0 0 0 5px var(--accent); }
+.fab:focus-visible { outline: none; box-shadow: 0 4px 14px rgba(31,75,201,0.32), 0 0 0 3px var(--surface), 0 0 0 5px var(--accent); }
 
 /* ===== CONTENT + MASONRY ===== */
 .content-area { flex: 1; padding: var(--s-3) var(--s-6) calc(var(--s-16) + var(--s-6) + env(safe-area-inset-bottom, 0px)); }
@@ -752,7 +752,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   font-size: 14px; font-family: var(--font); color: var(--ink);
   background: var(--surface-elevated);
 }
-.form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(180,87,27,0.1); outline: none; }
+.form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31,75,201,0.1); outline: none; }
 
 /* ===== Mise en page leketia : moderne et épurée (revue emil-design-eng) =====
    Une seule couleur d'accent, du blanc cassé, des traits fins. Moins de cadres, plus d'air. */
@@ -764,7 +764,7 @@ body { background: var(--surface); }
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
 .navbar-brand { font-size: 21px; font-weight: 700; gap: 10px; letter-spacing: -0.035em; }
-.navbar-brand .brand-mark { width: 32px; height: 32px; display: block; }
+.navbar-brand .brand-mark { width: 48px; height: 48px; display: block; margin: 0 -2px; }
 .backup-btn { border-radius: var(--r-full); background: var(--surface-elevated); }
 
 /* Collections : des onglets texte soulignés, sans pastilles */
@@ -812,12 +812,12 @@ body { background: var(--surface); }
 .status-favori::before { background: var(--accent); }
 .cat-chip { background: var(--accent-soft); color: var(--accent-hover); text-transform: none; font-size: 11px; letter-spacing: 0; }
 
-/* Bouton d'ajout : la couleur de la calebasse, appui franc */
-.fab { width: 60px; height: 60px; box-shadow: 0 10px 24px -8px rgba(180,87,27,0.55); }
+/* Bouton d'ajout : le bleu roi de la calebasse, appui franc */
+.fab { width: 60px; height: 60px; box-shadow: 0 10px 24px -8px rgba(31,75,201,0.55); }
 
 /* État vide : le logo, sans cadre */
 .empty-state .illustration { width: auto; height: auto; background: none; margin-bottom: var(--s-4); }
-.empty-state .illustration img { width: 72px; height: 72px; display: block; margin: 0 auto; }
+.empty-state .illustration img { width: 96px; height: 96px; display: block; margin: 0 auto; }
 .empty-state h3 { font-size: 20px; letter-spacing: -0.02em; }
 
 /* Fenêtres : coins plus doux, en feuille depuis le bas sur téléphone */

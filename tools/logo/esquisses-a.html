@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>leketia — piste A, esquisses</title>
+  <style>
+    body { margin: 0; padding: 24px; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p.intro { margin: 0 0 20px; color: #555; }
+    #rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+    .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 16px; }
+    .card h2 { font-size: 15px; margin: 0 0 2px; }
+    .card p { margin: 0 0 12px; color: #555; font-size: 13px; min-height: 40px; }
+    .sizes { display: flex; gap: 18px; align-items: flex-end; }
+    .sizes svg { display: block; }
+    .neg { background: #111; border-radius: 10px; padding: 6px; }
+    .lbl { font-size: 10px; color: #999; text-align: center; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Piste A — « Le leket gravé » : esquisses</h1>
+  <p class="intro">Un leket plein, de profil. Sur la panse, une rangée de points gravés : chaque point est un bit, comme la pyrogravure
+    devient une écriture. Noir sur blanc, les points sont des trous dans la forme. Montré à taille réelle, jusqu'à 16 px.</p>
+  <div id="rows"></div>
+
+  <script>
+    // Silhouette commune : un vrai leket de profil — bord coupé droit, panse un peu asymétrique,
+    // fond légèrement aplati (la calebasse posée), au lieu d'un demi-disque parfait.
+    const LEKET = 'M6 36 H94 C95 60 80 80 58 83 L44 83 C21 81 5 61 6 36 Z';
+    const SHALLOW = 'M3 42 H97 C97 62 80 78 57 80 L43 80 C20 78 3 63 3 42 Z';
+
+    // Une rangée de points : [x, y, r] ; « carre » dessine des carrés au lieu de ronds.
+    const row = (xs, y, r) => xs.map((x) => [x, y, r]);
+    const SKETCHES = [
+      { id: 'A1', name: 'Cinq points', note: 'Une rangée régulière, comme une trame d’écran. La version de référence.',
+        body: LEKET, dots: row([26, 38, 50, 62, 74], 56, 4.2) },
+      { id: 'A2', name: 'Trois gros points', note: 'Moins de points, plus gros : pensé pour rester lisible en icône.',
+        body: LEKET, dots: row([32, 50, 68], 56, 6.5) },
+      { id: 'A3', name: 'Points carrés', note: 'Le point gravé devient un pixel. Plus numérique, toujours sobre.',
+        body: LEKET, dots: row([30, 43.5, 57, 70.5], 56, 4.6), square: true },
+      { id: 'A4', name: 'Un bit éteint', note: 'Quatre places, trois points : un vide dans la trame dit 1-0-1-1.',
+        body: LEKET, dots: row([28, 61, 72], 56, 4.6), ghost: [[39, 56, 4.6]] },
+      { id: 'A5', name: 'Filet et points', note: 'Comme une vraie frise pyrogravée : un trait sous le bord, une rangée de points.',
+        body: LEKET, dots: row([30, 43.5, 57, 70.5], 60, 4), band: [10, 44, 90, 47.5] },
+      { id: 'A6', name: 'Leket large, points en arc', note: 'Bol plus bas et plus large ; les points suivent la courbe, comme un geste d’artisan.',
+        body: SHALLOW, dots: [[22, 54, 4], [35, 59, 4], [50, 61, 4], [65, 59, 4], [78, 54, 4]] },
+    ];
+
+    function svg(s, size, fg = '#111', bg = '#fff') {
+      const mark = (x, y, r, fill) => s.square
+        ? `<rect x="${x - r}" y="${y - r}" width="${2 * r}" height="${2 * r}" fill="${fill}"/>`
+        : `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/>`;
+      const dots = s.dots.map(([x, y, r]) => mark(x, y, r, bg)).join('');
+      // Le bit éteint : seulement le contour du point, gravé plus finement.
+      const ghost = (s.ghost || []).map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r - 0.9}" fill="none" stroke="${bg}" stroke-width="1.6"/>`).join('');
+      const band = s.band ? `<rect x="${s.band[0]}" y="${s.band[1]}" width="${s.band[2] - s.band[0]}" height="${s.band[3] - s.band[1]}" fill="${bg}"/>` : '';
+      return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="esquisse"><path d="${s.body}" fill="${fg}"/>${band}${dots}${ghost}</svg>`;
+    }
+
+    const cell = (html, label) => `<div>${html}<div class="lbl">${label}</div></div>`;
+    document.getElementById('rows').innerHTML = SKETCHES.map((s) => `
+      <div class="card">
+        <h2>${s.id} — ${s.name}</h2><p>${s.note}</p>
+        <div class="sizes">
+          ${cell(svg(s, 120), 'grand')}
+          ${cell(svg(s, 64), '64 px')}
+          ${cell(svg(s, 32), '32 px')}
+          ${cell(svg(s, 16), '16 px')}
+          ${cell(`<div class="neg">${svg(s, 44, '#fff', '#111')}</div>`, 'négatif')}
+        </div>
+      </div>`).join('');
+  </script>
+</body>
+</html>

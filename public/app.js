@@ -383,7 +383,7 @@ const App = (() => {
   }
 
   function emptyStateHtml(filtered) {
-    const mark = '<img src="/brand/leketia-mark.webp" alt="" width="72" height="72">';
+    const mark = '<img src="/brand/leketia-mark.webp" alt="" width="96" height="96">';
     if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${mark}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
     const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
     const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';

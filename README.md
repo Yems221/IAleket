@@ -1,8 +1,8 @@
 # leketia
 
-<img src="public/brand/leketia-logo.png" alt="Logo de leketia : une calebasse pleine, dont le contenu forme un dôme de cubes" width="200">
+<img src="public/brand/leketia-logo.png" alt="Logo de leketia : une calebasse bleu roi de profil, gravée du mot leket écrit en bits" width="200">
 
-Une calebasse pleine de données : un journal de liens personnel et open source. Tu partages un lien depuis
+Une calebasse de données : un journal de liens personnel et open source. Tu partages un lien depuis
 X, Instagram, YouTube, TikTok ou Pinterest, il devient une carte avec aperçu, et tout reste sur ton appareil.
 
 **État : première version, essayée sur ordinateur seulement.** Pas encore déployée ni testée sur téléphone.

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 30 92 56" role="img" aria-labelledby="t">
+  <title id="t">leketia</title>
+  <!-- Le leket gravé : une calebasse de profil ; le mot « leket » écrit en bits (ASCII 7 bits, une rangée par lettre) :
+       l 1101100 · e 1100101 · k 1101011 · e 1100101 · t 1110100. Chaque bit à 1 est un carré gravé, ici un trou dans la forme. -->
+  <path fill="#1F4BC9" fill-rule="evenodd" d="M7.5 34H92.5Q94 34 94 35.5C94 60 79 80 57.5 82.5L42.5 82.5C20.5 80 6 60 6 35.5Q6 34 7.5 34ZM26.5 41h5v5h-5ZM33.5 41h5v5h-5ZM47.5 41h5v5h-5ZM54.5 41h5v5h-5ZM26.5 48h5v5h-5ZM33.5 48h5v5h-5ZM54.5 48h5v5h-5ZM68.5 48h5v5h-5ZM26.5 55h5v5h-5ZM33.5 55h5v5h-5ZM47.5 55h5v5h-5ZM61.5 55h5v5h-5ZM68.5 55h5v5h-5ZM26.5 62h5v5h-5ZM33.5 62h5v5h-5ZM54.5 62h5v5h-5ZM68.5 62h5v5h-5ZM26.5 69h5v5h-5ZM33.5 69h5v5h-5ZM40.5 69h5v5h-5ZM54.5 69h5v5h-5Z"/>
+</svg>

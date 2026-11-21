@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>leketia — « leket » en bits</title>
+  <style>
+    body { margin: 0; padding: 24px; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 28px 0 10px; }
+    p { margin: 0 0 12px; color: #555; max-width: 760px; }
+    code { background: #f3f3f3; padding: 1px 5px; border-radius: 4px; }
+    .line { display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap; }
+    .line svg { display: block; }
+    .lbl { font-size: 11px; color: #999; text-align: center; margin-top: 6px; }
+    .tile { width: 96px; height: 96px; border-radius: 22px; display: grid; place-items: center; }
+    .bar { display: flex; align-items: center; gap: 10px; font: 700 21px/1 system-ui, sans-serif; letter-spacing: -0.03em; padding: 14px 18px; border: 1px solid #e5e5e5; border-radius: 12px; }
+    table { border-collapse: collapse; font: 13px ui-monospace, monospace; }
+    td { padding: 2px 10px; }
+  </style>
+</head>
+<body>
+  <h1>« leket » écrit en bits, gravé sur la calebasse bleu roi</h1>
+  <p>Une rangée par lettre, code ASCII sur 7 bits. Un 1 est un carré gravé (la gravure enlève la teinture et montre la chair claire),
+    un 0 reste bleu. Version une couleur : les carrés sont des trous.</p>
+  <table id="code"></table>
+
+  <h2>1. Le tracé</h2>
+  <div class="line" id="master"></div>
+
+  <h2>2. De grand à 16 px</h2>
+  <p>Sous 48 px, les 35 bits se fondent : une version à trois gros carrés prend le relais (icône d'onglet, favicon).</p>
+  <div class="line" id="sizes"></div>
+
+  <h2>3. En situation</h2>
+  <div class="line" id="context"></div>
+
+  <script type="module">
+    import { ROWS, WORD, ROYAL_BLUE, FLESH, markPath, SMALL } from './leket-bits.js';
+
+    document.getElementById('code').innerHTML = [...WORD].map((c, i) => `<tr><td>${c}</td><td>${ROWS[i]}</td></tr>`).join('');
+
+    const svg = (px, { fg = ROYAL_BLUE, small = px < 48, bg = null } = {}) =>
+      `<svg viewBox="4 30 92 56" width="${px}" height="${Math.round(px * 56 / 92)}" role="img" aria-label="leketia"${bg ? ` style="background:${bg}"` : ''}>
+        <path fill="${fg}" fill-rule="evenodd" d="${small ? markPath(SMALL) : markPath()}"/></svg>`;
+    const cell = (html, label) => `<div>${html}<div class="lbl">${label}</div></div>`;
+
+    document.getElementById('master').innerHTML = [
+      cell(svg(320), 'bleu roi'),
+      cell(svg(320, { fg: '#111' }), 'noir (impression)'),
+      cell(`<div style="background:${ROYAL_BLUE};border-radius:16px;padding:12px">${svg(296, { fg: FLESH })}</div>`, 'négatif'),
+    ].join('');
+
+    document.getElementById('sizes').innerHTML =
+      [192, 128, 96, 64, 48, 32, 24, 16].map((s) => cell(svg(s), `${s} px${s < 48 ? ' (3 carrés)' : ''}`)).join('');
+
+    document.getElementById('context').innerHTML = [
+      cell(`<div class="tile" style="background:#fbf3e6">${svg(80)}</div>`, 'icône, fond crème'),
+      cell(`<div class="tile" style="background:${ROYAL_BLUE}">${svg(80, { fg: FLESH })}</div>`, 'icône, fond bleu'),
+      cell(`<div class="bar">${svg(44, { small: true })} leketia</div>`, 'barre du haut'),
+      cell(`<div style="border:1px dashed #bbb;padding:14px;border-radius:50%">${svg(110, { fg: '#111' })}</div>`, 'tampon'),
+    ].join('');
+  </script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>leketia — piste B, esquisses</title>
+  <style>
+    body { margin: 0; padding: 24px; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p.intro { margin: 0 0 20px; color: #555; }
+    #rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+    .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 16px; }
+    .card h2 { font-size: 15px; margin: 0 0 2px; }
+    .card p { margin: 0 0 12px; color: #555; font-size: 13px; min-height: 40px; }
+    .sizes { display: flex; gap: 18px; align-items: flex-end; }
+    .sizes svg { display: block; }
+    .neg { background: #111; border-radius: 10px; padding: 6px; }
+    .lbl { font-size: 10px; color: #999; text-align: center; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Piste B — « La coupe numérique » : esquisses</h1>
+  <p class="intro">Un leket de profil, courbe vivante, dont le bord est coupé net avec un seul cran, comme un pixel.
+    Noir sur blanc, sans matière ni couleur : on juge d'abord la silhouette. Chaque variante est montrée à sa taille réelle, jusqu'à 16 px.</p>
+  <div id="rows"></div>
+
+  <script>
+    // Chaque esquisse est un seul tracé plein dans un carré de 100 × 100.
+    // Le bord du leket est une ligne droite ; le « cran » est la seule touche numérique.
+    const SKETCHES = [
+      {
+        id: 'B1', name: 'Cran au centre',
+        note: 'Le bord descend d’une marche au milieu. Symétrique, très lisible.',
+        d: 'M8 38 H50 V45 H92 C92 70 74 90 50 90 C26 90 8 68 8 38 Z',
+      },
+      {
+        id: 'B2', name: 'Cran au tiers',
+        note: 'La marche est décalée à droite : le fruit garde sa courbe, la coupe paraît voulue.',
+        d: 'M8 38 H66 V45 H92 C92 70 75 90 51 90 C26 90 8 68 8 38 Z',
+      },
+      {
+        id: 'B3', name: 'Pixel en creux',
+        note: 'Le bord reste droit ; un seul carré manque, comme un pixel retiré.',
+        d: 'M8 40 H58 V48 H66 V40 H92 C92 70 74 90 50 90 C26 90 8 68 8 40 Z',
+      },
+      {
+        id: 'B4', name: 'Leket peu profond',
+        note: 'Bol large et bas, comme un vrai leket de table. Marche au tiers.',
+        d: 'M5 46 H64 V52 H95 C95 70 75 84 50 84 C25 84 5 68 5 46 Z',
+      },
+      {
+        id: 'B5', name: 'Leket profond, asymétrique',
+        note: 'Plus proche du fruit coupé : panse plus ronde, un peu irrégulière.',
+        d: 'M12 32 H60 V39 H89 C91 66 74 92 49 92 C24 92 9 64 12 32 Z',
+      },
+      {
+        id: 'B6', name: 'Double marche',
+        note: 'Deux crans réguliers, comme un escalier de pixels. Plus « numérique », moins sobre.',
+        d: 'M8 36 H44 V42 H62 V48 H92 C92 72 74 90 50 90 C26 90 8 66 8 36 Z',
+      },
+    ];
+
+    const svg = (d, size, fill = '#111') =>
+      `<svg viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="esquisse"><path d="${d}" fill="${fill}"/></svg>`;
+
+    const cell = (html, label) => `<div>${html}<div class="lbl">${label}</div></div>`;
+    document.getElementById('rows').innerHTML = SKETCHES.map((s) => `
+      <div class="card">
+        <h2>${s.id} — ${s.name}</h2><p>${s.note}</p>
+        <div class="sizes">
+          ${cell(svg(s.d, 120), 'grand')}
+          ${cell(svg(s.d, 64), '64 px')}
+          ${cell(svg(s.d, 32), '32 px')}
+          ${cell(svg(s.d, 16), '16 px')}
+          ${cell(`<div class="neg">${svg(s.d, 44, '#fff')}</div>`, 'négatif')}
+        </div>
+      </div>`).join('');
+  </script>
+</body>
+</html>

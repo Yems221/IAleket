@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>leketia — A3 affiné</title>
+  <style>
+    body { margin: 0; padding: 24px; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 28px 0 10px; }
+    p { margin: 0 0 12px; color: #555; max-width: 760px; }
+    .line { display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap; }
+    .line svg { display: block; }
+    .lbl { font-size: 11px; color: #999; text-align: center; margin-top: 6px; }
+    .grid { background: repeating-linear-gradient(0deg, #eee 0 1px, transparent 1px 10px), repeating-linear-gradient(90deg, #eee 0 1px, transparent 1px 10px); }
+    .tile { width: 96px; height: 96px; border-radius: 22px; display: grid; place-items: center; }
+    .bar { display: flex; align-items: center; gap: 10px; font: 700 21px/1 system-ui, sans-serif; letter-spacing: -0.03em; padding: 14px 18px; border: 1px solid #e5e5e5; border-radius: 12px; }
+    .tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f1f1f1; border-radius: 8px 8px 0 0; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>A3 affiné — « Le leket gravé », points carrés</h1>
+  <p>Noir et blanc seulement. On fixe la silhouette avant la matière et la couleur.</p>
+
+  <h2>1. Le dessin, sur sa grille</h2>
+  <p>Les carrés sont posés sur une grille régulière : même taille, intervalle égal à la moitié d'un carré, rangée centrée sur la panse.
+    Le bord est coupé droit, avec des coins à peine adoucis pour tenir à l'impression. Le fond s'aplatit, comme une calebasse posée.</p>
+  <div class="line" id="master"></div>
+
+  <h2>2. De grand à 16 px</h2>
+  <p>Sous 24 px, quatre carrés se collent : une version simplifiée à trois carrés plus gros prend le relais (favicon, onglet).</p>
+  <div class="line" id="sizes"></div>
+
+  <h2>3. En situation</h2>
+  <div class="line" id="context"></div>
+
+  <script>
+    // ---- Tracé maître, dans un carré de 100 × 100 ----
+    // Panse : un peu plus pleine à droite, comme un vrai fruit coupé ; fond aplati entre x = 43 et 57.
+    const BODY = 'M7.5 34 H92.5 Q94 34 94 35.5 C94 60 79 80 57.5 82.5 L42.5 82.5 C20.5 80 6 60 6 35.5 Q6 34 7.5 34 Z';
+    const MAIN = { size: 9, gap: 4.5, count: 4, y: 53 };   // version normale
+    const SMALL = { size: 12, gap: 6, count: 3, y: 51 };   // version 16-24 px
+
+    function squares({ size, gap, count, y }) {
+      const total = count * size + (count - 1) * gap;
+      const x0 = 50 - total / 2;
+      return Array.from({ length: count }, (_, i) => [x0 + i * (size + gap), y, size]);
+    }
+
+    function svg(px, { fg = '#111', bg = '#fff', small = px < 24 } = {}) {
+      const holes = squares(small ? SMALL : MAIN)
+        .map(([x, y, s]) => `<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="0.6"/>`).join('');
+      // Les carrés sont de vrais trous (masque) : la version fonctionne sur n'importe quel fond.
+      const id = 'm' + Math.random().toString(36).slice(2, 8);
+      return `<svg viewBox="0 0 100 100" width="${px}" height="${px}" role="img" aria-label="leketia">
+        <mask id="${id}"><rect width="100" height="100" fill="#fff"/><g fill="#000">${holes}</g></mask>
+        <path d="${BODY}" fill="${fg}" mask="url(#${id})"/></svg>`;
+    }
+    window.leketiaSvg = svg; // réutilisé pour exporter les fichiers
+
+    const cell = (html, label, cls = '') => `<div><div class="${cls}">${html}</div><div class="lbl">${label}</div></div>`;
+
+    document.getElementById('master').innerHTML =
+      cell(svg(300), 'tracé maître', 'grid') + cell(svg(300, { fg: '#fff' }).replace('<svg', '<svg style="background:#111;border-radius:16px"'), 'négatif');
+
+    document.getElementById('sizes').innerHTML =
+      [128, 64, 48, 32, 24, 20, 16].map((s) => cell(svg(s), `${s} px${s < 24 ? ' (3 carrés)' : ''}`)).join('');
+
+    document.getElementById('context').innerHTML = [
+      cell(`<div class="tile" style="background:#fff;border:1px solid #ddd">${svg(64)}</div>`, 'icône, fond clair'),
+      cell(`<div class="tile" style="background:#111">${svg(64, { fg: '#fff' })}</div>`, 'icône, fond sombre'),
+      cell(`<div class="bar">${svg(32)} leketia</div>`, 'barre du haut de l’app'),
+      cell(`<div class="tab">${svg(16)} leketia — ton journal</div>`, 'onglet du navigateur (16 px)'),
+      cell(`<div style="border:1px dashed #bbb;padding:10px;border-radius:50%">${svg(90)}</div>`, 'tampon / autocollant'),
+    ].join('');
+  </script>
+</body>
+</html>

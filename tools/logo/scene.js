@@ -1,9 +1,9 @@
 // Logo de leketia — couche réaliste : le leket bleu roi, gravé du mot « leket » écrit en bits.
-// Silhouette et position des bits : tracé une couleur (leket-bits.js). Comme sur les calebasses peules,
-// la peau est teinte puis gravée : chaque bit à 1 enlève la teinture et montre la chair claire.
+// Silhouette et position des bits : tracé une couleur (leket-bits.js). La calebasse est d'un bleu roi uniforme ;
+// chaque bit à 1 est un carré gravé, blanc. Le volume vient uniquement de la lumière.
 // Vue exactement de côté (caméra orthographique) : le contour reste identique au tracé.
 import * as THREE from 'three';
-import { bitSquares } from './leket-bits.js';
+import { bitSquares, ROYAL_BLUE } from './leket-bits.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const SIZE = 2048;
@@ -70,18 +70,11 @@ const texCanvas = document.createElement('canvas');
 texCanvas.width = TW; texCanvas.height = TH;
 const g = texCanvas.getContext('2d');
 
-// 1. Fond de peau : dégradé le long du profil, du fond (v = 0, bas de la texture) au bord (v = 1).
-const skin = g.createLinearGradient(0, TH, 0, 0);
-skin.addColorStop(0, '#0f2a7d'); skin.addColorStop(0.45, '#1a40b4'); skin.addColorStop(1, '#2a56cf');
-g.fillStyle = skin; g.fillRect(0, 0, TW, TH);
-// 2. Veines du fruit (dans le sens du profil) et grain.
-for (let i = 0; i < 420; i++) {
-  g.fillStyle = `rgba(${r() < 0.6 ? '8,22,80' : '120,160,240'},${0.03 + r() * 0.05})`; // teinture inégale, comme à la main
-  g.beginPath(); g.ellipse(r() * TW, r() * TH, 1.5 + r() * 3.5, 60 + r() * 220, 0, 0, Math.PI * 2); g.fill();
-}
-for (let i = 0; i < 2500; i++) {
-  g.fillStyle = `rgba(6,18,64,${0.04 + r() * 0.08})`;
-  g.beginPath(); g.arc(r() * TW, r() * TH, 0.6 + r() * 2.2, 0, Math.PI * 2); g.fill();
+// 1. Peau : un seul bleu roi, sans dégradé ; un grain très léger du même bleu pour la matière.
+g.fillStyle = ROYAL_BLUE; g.fillRect(0, 0, TW, TH);
+for (let i = 0; i < 1800; i++) {
+  g.fillStyle = `rgba(20,55,170,${0.05 + r() * 0.06})`;
+  g.beginPath(); g.arc(r() * TW, r() * TH, 0.6 + r() * 1.8, 0, Math.PI * 2); g.fill();
 }
 
 // 3. Carrés pyrogravés : chaque texel retrouve le point (x, y) qu'il occupe vu de face
@@ -93,7 +86,18 @@ for (let i = 1; i < profileSvg.length; i++) lengths.push(lengths[i - 1] + Math.h
 const vs = lengths.map((l) => l / lengths[lengths.length - 1]);
 
 const img = g.getImageData(0, 0, TW, TH);
-const FLESH = [243, 227, 195]; // chair de la calebasse sous la teinture
+// Relief : blanc = surface, noir = creux. Les carrés gravés sont creusés dans la peau.
+const bumpCanvas = document.createElement('canvas');
+bumpCanvas.width = TW; bumpCanvas.height = TH;
+const bg2 = bumpCanvas.getContext('2d');
+bg2.fillStyle = '#fff'; bg2.fillRect(0, 0, TW, TH);
+const bump = bg2.getImageData(0, 0, TW, TH);
+// Masque des bits : ils restent blancs quelle que soit la lumière (sinon l'ombre de la panse les grise).
+const glowCanvas = document.createElement('canvas');
+glowCanvas.width = TW; glowCanvas.height = TH;
+const glowCtx = glowCanvas.getContext('2d');
+glowCtx.fillStyle = '#000'; glowCtx.fillRect(0, 0, TW, TH);
+const glow = glowCtx.getImageData(0, 0, TW, TH);
 for (let ty = 0; ty < TH; ty++) {
   const v = 1 - ty / TH;
   let k = 1;
@@ -114,15 +118,23 @@ for (let ty = 0; ty < TH; ty++) {
       if (xSvg > x0 + jitter && xSvg < x1 - jitter && ySvg > y0 + jitter && ySvg < y1 - jitter) {
         const p = (ty * TW + tx) * 4;
         const edge = Math.min(xSvg - x0, x1 - xSvg, ySvg - y0, y1 - ySvg);
-        // Fond de gravure : chair claire, un peu plus sombre sur le bord (l'entaille fait une ombre).
-        const shade = edge < 0.45 ? 0.82 : 1;
-        for (let c = 0; c < 3; c++) img.data[p + c] = FLESH[c] * shade;
+        // Bit gravé : blanc, avec un fin liseré d'ombre sur le bord de l'entaille.
+        const depth = Math.min(1, edge / 0.6);
+        const white = edge < 0.35 ? 205 : 255;
+        for (let c = 0; c < 3; c++) img.data[p + c] = white;
+        for (let c = 0; c < 3; c++) bump.data[p + c] = 255 * (1 - depth * 0.5);
+        for (let c = 0; c < 3; c++) glow.data[p + c] = edge < 0.35 ? 120 : 235;
         break;
       }
     }
   }
 }
 g.putImageData(img, 0, 0);
+bg2.putImageData(bump, 0, 0);
+glowCtx.putImageData(glow, 0, 0);
+const emissiveMap = new THREE.CanvasTexture(glowCanvas);
+emissiveMap.colorSpace = THREE.SRGBColorSpace;
+const bumpMap = new THREE.CanvasTexture(bumpCanvas);
 const map = new THREE.CanvasTexture(texCanvas);
 map.colorSpace = THREE.SRGBColorSpace;
 map.anisotropy = 8;
@@ -139,7 +151,7 @@ for (let i = 0; i < pos.count; i++) {
 }
 geo.computeVertexNormals();
 const bowl = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({
-  map, roughness: 0.62, clearcoat: 0.18, clearcoatRoughness: 0.6, sheen: 0.25, sheenColor: new THREE.Color(0xffe0b0),
+  map, bumpMap, bumpScale: 3, emissive: 0xffffff, emissiveMap, emissiveIntensity: 0.75, roughness: 0.62, clearcoat: 0.18, clearcoatRoughness: 0.6, sheen: 0.25, sheenColor: new THREE.Color(0xffe0b0),
 }));
 scene.add(bowl);
 

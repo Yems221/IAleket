@@ -4,7 +4,7 @@
 // Source unique, utilisée par la planche de contrôle (navigateur) et le générateur de fichiers (Node).
 export const WORD = 'leket';
 export const ROYAL_BLUE = '#1F4BC9';     // bleu roi de la calebasse
-export const FLESH = '#F3E3C3';          // chair claire révélée par la gravure
+export const FLESH = '#FFFFFF';          // bits gravés en blanc
 
 // Silhouette du leket (repère 100 × 100), celle de la piste A3 validée.
 export const BODY = 'M7.5 34H92.5Q94 34 94 35.5C94 60 79 80 57.5 82.5L42.5 82.5C20.5 80 6 60 6 35.5Q6 34 7.5 34Z';

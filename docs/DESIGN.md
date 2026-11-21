@@ -63,8 +63,8 @@ jusqu'à 16 px, choix d'une silhouette, puis seulement la matière.
 - **Le code :** une rangée par lettre, ASCII sur 7 bits (l 1101100 · e 1100101 · k 1101011 · e 1100101 ·
   t 1110100), soit une grille de 7 × 5 sur la panse. Un 1 est un carré gravé, un 0 reste bleu.
   Définition unique : `tools/logo/leket-bits.js`.
-- **Matière :** comme sur les calebasses peules, la peau est teinte puis gravée ; la gravure enlève la teinture
-  et montre la chair claire. Bleu roi `#1F4BC9`, chair `#F3E3C3`.
+- **Couleurs :** la calebasse est d'un seul bleu roi uniforme (`#1F4BC9`), sans dégradé ni veinure ; les bits
+  sont gravés en blanc. Le volume ne vient que de la lumière.
 - **Fichiers :** `public/brand/leketia-logo.svg` (bleu roi), `leketia-logo-mono.svg` (une couleur, suit le texte,
   pour l'impression), `leketia-favicon.svg` (sous 48 px : trois gros carrés, les 35 bits s'y fondraient),
   `leketia-logo.png` (rendu réaliste three.js, 2048 px), `leketia-mark.webp` (barre du haut). Les SVG se

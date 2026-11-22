@@ -3,7 +3,7 @@
 // les liens sans rien exécuter, WhatsApp/Telegram/iMessage trouvent titre et image d'aperçu.
 // Utilisé par /b (board dans le lien) et /p/<id> (page publiée depuis le Drive de son auteur).
 
-type Link = { title: string; url: string; note: string };
+type Link = { title: string; url: string; note: string; img?: string };
 type Board = { name: string; date: string; links: Link[] };
 
 export const escHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
@@ -14,7 +14,7 @@ export const PAGE_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
 };
 
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' https://i.ytimg.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 // Miniature YouTube déduite de l'adresse : aucune image n'est stockée nulle part.
 function youtubeId(raw: string): string {
@@ -64,7 +64,8 @@ h1{font-size:26px;line-height:1.2;margin:0 0 4px;overflow-wrap:anywhere}.meta{co
 export function boardCards(board: Board): string {
   return `<ol class="cards">${board.links.map((l) => {
     const yt = youtubeId(l.url);
-    const img = yt ? `<img src="https://i.ytimg.com/vi/${yt}/mqdefault.jpg" alt="" loading="lazy">` : '';
+    const src = l.img || (yt ? `https://i.ytimg.com/vi/${yt}/mqdefault.jpg` : '');
+    const img = src ? `<img src="${escHtml(src)}" alt="" loading="lazy">` : '';
     return `<li class="card">${img}<div><span class="dom">${escHtml(domain(l.url))}</span><a href="${escHtml(l.url)}" rel="noopener noreferrer nofollow">${escHtml(l.title || l.url)}</a>${l.note ? `<p class="note">${escHtml(l.note)}</p>` : ''}</div></li>`;
   }).join('')}</ol>`;
 }

@@ -68,3 +68,21 @@ test('empreinte : change avec le contenu, pas avec la date', async () => {
   assert.equal(h, await pageHash({ ...board, date: '2030-01-01' }));
   assert.notEqual(h, await pageHash({ ...board, links: board.links.slice(1) }));
 });
+
+test('page publiée : miniatures intégrées, et seulement des images', () => {
+  const img = 'data:image/jpeg;base64,' + Buffer.from('fausse image').toString('base64');
+  const back = fromPage(JSON.parse(JSON.stringify(toPage({ name: 'x', links: [
+    { title: 'avec', url: 'https://example.com/a', img },
+    { title: 'piège', url: 'https://example.com/b', img: 'data:text/html;base64,PHNjcmlwdD4=' },
+    { title: 'piège 2', url: 'https://example.com/c', img: 'javascript:alert(1)' },
+  ] }))));
+  assert.equal(back.links[0].img, img);
+  assert.equal(back.links[1].img, undefined);
+  assert.equal(back.links[2].img, undefined);
+});
+
+test('le lien et le QR ne transportent pas les miniatures', async () => {
+  const img = 'data:image/jpeg;base64,' + Buffer.from('x'.repeat(3000)).toString('base64');
+  const back = await decode(await encode({ name: 'x', links: [{ title: 't', url: 'https://example.com/', img }] }));
+  assert.equal(back.links[0].img, undefined);
+});

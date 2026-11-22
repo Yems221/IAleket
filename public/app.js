@@ -651,11 +651,44 @@ const App = (() => {
   let shareTab = 'qr';
   let shareRun = 0;
 
-  async function boardFor(scope) {
+  async function boardFor(scope, { thumbs = false } = {}) {
     const path = scope ? '/api/spaces/' + encodeURIComponent(scope) + '/items' : '/api/items';
     const its = (await api(path)).items.filter(it => it.url);
     const name = scope ? (spaces.find(s => s.id === scope) || {}).name : 'Mon journal';
-    return { name: name || 'Mon journal', date: new Date().toISOString().slice(0, 10), links: its.map(it => ({ title: it.title, url: it.url, note: it.description })) };
+    const links = its.map(it => ({ title: it.title, url: it.url, note: it.description }));
+    if (thumbs) { // page publiée : petites miniatures intégrées au fichier, dans la limite du budget
+      let budget = THUMB_BUDGET;
+      for (let i = 0; i < its.length; i++) {
+        if (!its[i].image_url || its[i].media_kind === 'video') continue;
+        const img = await thumbData(its[i].image_url);
+        if (img && img.length <= budget) { links[i].img = img; budget -= img.length; }
+      }
+    }
+    return { name: name || 'Mon journal', date: new Date().toISOString().slice(0, 10), links };
+  }
+
+  // Miniature réduite (240 px de large, JPEG) en texte data:, mémorisée pendant la session.
+  const THUMB_BUDGET = 700 * 1024;
+  const thumbCache = new Map();
+  async function thumbData(blobUrl) {
+    if (thumbCache.has(blobUrl)) return thumbCache.get(blobUrl);
+    let out = '';
+    try {
+      const bmp = new Image(); // pas de fetch() : la politique de sécurité de l'app refuse fetch sur blob:
+      bmp.src = blobUrl;
+      await bmp.decode();
+      const scale = Math.min(1, 240 / bmp.naturalWidth);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bmp.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(bmp.naturalHeight * scale));
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height); // JPEG n'a pas de transparence
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      out = canvas.toDataURL('image/jpeg', 0.7);
+      if (!out.startsWith('data:image/jpeg') || out.length > ShareCodec.MAX_IMG_CHARS) out = '';
+    } catch { out = ''; }
+    thumbCache.set(blobUrl, out);
+    return out;
   }
   // Le plus grand début du board dont le lien tient dans la limite (recherche par dichotomie).
   async function fitBoard(board, max) {
@@ -744,7 +777,7 @@ const App = (() => {
 
     const url = pageUrl(pub.fileId);
     const link = mk('a', 'share-url'); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = url.replace(/^https?:\/\//, ''); pane.append(link);
-    const upToDate = pub.hash === await ShareCodec.pageHash(board);
+    const upToDate = pub.hash === await ShareCodec.pageHash(await boardFor(scope === 'all' ? null : scope, { thumbs: true }));
     if (run !== shareRun) return;
     note(upToDate ? 'Page publiée et à jour. Lisible par une personne, un agent IA, et avec un aperçu dans WhatsApp.' : 'Tu as modifié la collection depuis la dernière publication.');
     if (!upToDate) button('Mettre à jour la page', 'btn-primary', async () => {
@@ -759,7 +792,7 @@ const App = (() => {
   }
 
   async function publishScope(scope) {
-    const board = await boardFor(scope === 'all' ? null : scope);
+    const board = await boardFor(scope === 'all' ? null : scope, { thumbs: true });
     const fileId = await Drive.publish(ShareCodec.toPage(board), board.name);
     const all = await Store.publications();
     all[scope] = { fileId, hash: await ShareCodec.pageHash(board), publishedAt: Date.now(), updatedAt: Date.now() };
@@ -772,7 +805,7 @@ const App = (() => {
     const pub = all[scope];
     if (!pub) return;
     if (scope !== 'all' && !spaces.some(s => s.id === scope)) return; // collection supprimée : la page reste, à retirer à la main
-    const board = await boardFor(scope === 'all' ? null : scope);
+    const board = await boardFor(scope === 'all' ? null : scope, { thumbs: true });
     const hash = await ShareCodec.pageHash(board);
     if (hash === pub.hash) return;
     if (!interactive && !Drive.canPublishSilently()) return; // mise à jour au prochain passage dans Partager › Publier

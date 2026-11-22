@@ -45,11 +45,14 @@ const safeLink = (raw) => {
   } catch { return ''; }
 };
 const text = (v, max) => String(v == null ? '' : v).slice(0, max);
+// Miniature intégrée à une page publiée : petite image JPEG/PNG/WebP en data:, rien d'autre.
+export const MAX_IMG_CHARS = 40000;
+const safeImg = (v) => (typeof v === 'string' && v.length <= MAX_IMG_CHARS && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(v) ? v : '');
 
 /** Board partagé : { name, date, links: [{ title, url, note }] }, nettoyé (liens http(s) seulement). */
 export function clean(board) {
   const links = (Array.isArray(board && board.links) ? board.links : [])
-    .map((l) => ({ title: text(l && l.title, 300).trim(), url: safeLink(l && l.url), note: text(l && l.note, 1000).trim() }))
+    .map((l) => { const img = safeImg(l && l.img); return { title: text(l && l.title, 300).trim(), url: safeLink(l && l.url), note: text(l && l.note, 1000).trim(), ...(img ? { img } : {}) }; })
     .filter((l) => l.url)
     .slice(0, MAX_LINKS);
   return { name: text(board && board.name, 80).trim() || 'Board partagé', date: text(board && board.date, 10), links };
@@ -83,13 +86,13 @@ export const MAX_PAGE_BYTES = 1024 * 1024;
 /** Contenu du fichier publié dans le Drive. */
 export function toPage(board) {
   const b = clean(board);
-  return { kind: PAGE_KIND, v: 1, n: b.name, d: b.date, l: b.links.map((l) => (l.note ? [l.title, l.url, l.note] : [l.title, l.url])) };
+  return { kind: PAGE_KIND, v: 1, n: b.name, d: b.date, l: b.links.map((l) => (l.img ? [l.title, l.url, l.note, l.img] : l.note ? [l.title, l.url, l.note] : [l.title, l.url])) };
 }
 
 /** Lit un fichier publié ; refuse tout ce qui n'est pas une page leketia. */
 export function fromPage(raw) {
   if (!raw || raw.kind !== PAGE_KIND || raw.v !== 1 || !Array.isArray(raw.l)) throw new Error('Ce n’est pas une page leketia');
-  return clean({ name: raw.n, date: raw.d, links: raw.l.map((x) => ({ title: x && x[0], url: x && x[1], note: x && x[2] })) });
+  return clean({ name: raw.n, date: raw.d, links: raw.l.map((x) => ({ title: x && x[0], url: x && x[1], note: x && x[2], img: x && x[3] })) });
 }
 
 /** Empreinte du contenu (sans la date) : sert à savoir si la page publiée est à jour. */

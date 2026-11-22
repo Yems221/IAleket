@@ -1,5 +1,5 @@
-# leketia — aucun stockage serveur : ni base de données, ni fichiers.
-# Le serveur ne fait qu'une chose : aller chercher l'aperçu d'un lien.
+# leketia — aucune donnée de journal sur le serveur : les liens restent sur l'appareil et dans le Drive.
+# Seule base : la mesure d'audience anonyme (TELEMETRY), facultative. Sans elle, la mesure est ignorée.
 name = "leketia"
 compatibility_date = "2026-05-01"
 pages_build_output_dir = "public"
@@ -8,3 +8,9 @@ pages_build_output_dir = "public"
 # Identifiant Google de cette instance, pour la sauvegarde dans Google Drive (public, pas un secret).
 # Chaque instance crée le sien : voir docs/GOOGLE_DRIVE.md. Vide = bouton Drive masqué.
 GOOGLE_CLIENT_ID = "959593932591-2meg4t7kpejid9dfrtbric88kiun4c7s.apps.googleusercontent.com"
+
+# Mesure d'audience anonyme (docs/TELEMETRIE.md). Une autre instance peut retirer ce bloc : tout continue de marcher.
+[[d1_databases]]
+binding = "TELEMETRY"
+database_name = "leketia-telemetry"
+database_id = "8fc2d4e7-563c-4bd5-a57c-7dacb88a8302" # compte ialeket ; une autre instance met le sien ou retire ce bloc

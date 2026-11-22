@@ -4,8 +4,14 @@
 // (même page en texte, ou en Markdown avec ?format=md ou l'en-tête Accept: text/markdown).
 import { decode, toMarkdown, isExpired } from '../public/share-codec.mjs';
 import { htmlPage, boardCards, countLabel, escHtml, PAGE_HEADERS, isIos, iosBridge, lockedPage, expiredPage } from './_board-page';
+import { withView, type TelemetryEnv } from './_telemetry';
 
-export async function onRequestGet(context: { request: Request }): Promise<Response> {
+type Ctx = { request: Request; env: TelemetryEnv; waitUntil?: (p: Promise<unknown>) => void };
+
+// Chaque vue est comptée (type de lecteur, format), sans rien garder sur la personne : voir functions/_telemetry.ts.
+export const onRequestGet = withView<Ctx>('b', handle);
+
+async function handle(context: Ctx): Promise<Response> {
   const url = new URL(context.request.url);
   // Partage protégé (?e=…) : le serveur ne peut ni le lire ni le résumer, il sert seulement la page qui demande le mot de passe.
   const e = url.searchParams.get('e') || '';

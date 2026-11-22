@@ -982,3 +982,8 @@ body.selecting .card.is-selected::after { background: var(--accent-fill) url("da
     box-shadow: 0 0 0 1px var(--border-strong), 0 4px 8px rgb(var(--shadow-rgb) / 0.08), 0 22px 38px -16px rgb(var(--shadow-rgb) / 0.34); }
 }
 @media (prefers-reduced-motion: reduce) { .card, .card:hover { transition: none; } }
+
+/* Case « Mesure d'audience anonyme » (fenêtre Sauvegarde) */
+.mesure-toggle { display: flex; align-items: flex-start; gap: var(--s-2); margin: var(--s-4) 0 0; font-size: 13px; color: var(--ink-secondary); cursor: pointer; }
+.mesure-toggle input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent-fill); flex: none; }
+.mesure-toggle input:disabled + span { opacity: 0.6; }

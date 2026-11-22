@@ -12,7 +12,8 @@ const App = (() => {
   let mediaFile = null; // File choisi (image ou vidéo) — uploadé en streaming, pas de base64
   let mediaKind = 'image';
   let linkCanonicalUrl = ''; // URL résolue par le serveur (liens courts TikTok → URL embarquable)
-  let linkImageUrl = ''; // image d'aperçu trouvée par le serveur, gardée pour la carte même quand le lecteur l'a remplacée
+  let linkImageUrl = '';
+  let addVia = 'manuel'; // pour la mesure : partage depuis une autre appli, collage, ou saisie // image d'aperçu trouvée par le serveur, gardée pour la carte même quand le lecteur l'a remplacée
   let sharedMediaUrl = null;      // média déjà stocké en R2 via /share-target (partage natif) → pas de ré-upload
   let sharedMediaKind = 'image';  // 'image' | 'video' du média partagé
   let sharedIntentHandled = false; // un seul traitement du partage par chargement de page
@@ -45,6 +46,7 @@ const App = (() => {
       cleanupExpired().catch(() => {});
       Sync.start(); // sans fenêtre : ne fait rien tant que la synchronisation n'est pas activée sur cet appareil
       refreshSyncButton();
+      Telemetry.start(((document.querySelector('script[src*="/app.js"]') || {}).src || '').split('v=')[1] || '');
     } catch (e) {
       document.getElementById('grid').innerHTML = '';
       toast('Le stockage de ce navigateur est indisponible (navigation privée ?)', 'error');
@@ -110,6 +112,7 @@ const App = (() => {
       document.getElementById('spaceName').value = '';
       closeAddSpace();
       await loadSpaces();
+      Telemetry.track('collection_created', { from: 'fenetre' });
       toast('Collection créée');
     } catch (e) { toast(e.message, 'error'); }
   }
@@ -238,6 +241,7 @@ const App = (() => {
           const r = await api('/api/spaces', { method: 'POST', body: { name } });
           await loadSpaces();
           renderCatChecks(containerId, r.space ? [...keep, r.space.id] : keep);
+          Telemetry.track('collection_created', { from: 'ajout' });
           toast('Collection créée');
           return;
         } catch (e) { toast(e.message, 'error'); }
@@ -568,7 +572,7 @@ const App = (() => {
     const b = inboxButton();
     if (b) b.hidden = !(Install.ouverteInstallee() && /^ios/.test(InstallParcours.parcours(navigator.userAgent, navigator.maxTouchPoints || 0)) && Drive.linked());
   }
-  function closeAddItem() { document.getElementById('addItemModal').classList.remove('active'); resetAddItemForm(); }
+  function closeAddItem() { document.getElementById('addItemModal').classList.remove('active'); resetAddItemForm(); addVia = 'manuel'; }
 
   // Partage reçu d'une autre appli. Android : le service worker lit le partage, garde un éventuel
   // fichier sur l'appareil, puis ouvre /?share_... . iPhone : un Raccourci ouvre /add?u=<lien>.
@@ -585,6 +589,7 @@ const App = (() => {
     // Sécurité : share_media vient de l'adresse (forgeable) → seul un identifiant de fichier local est accepté.
     if (shareMedia && !/^[A-Za-z0-9-]{8,64}$/.test(shareMedia)) return;
     sharedIntentHandled = true;
+    addVia = 'partage';
 
     if (shareMedia) {
       // Fichier déjà gardé sur l'appareil par le service worker → aperçu, sans le réenregistrer.
@@ -753,6 +758,9 @@ const App = (() => {
           }
         });
       }
+      if (activeModalTab === 'link') Telemetry.track('link_added', { rs: Telemetry.rsOf(linkCanonicalUrl || document.getElementById('linkUrl').value.trim()), via: addVia, image: !!(linkImageUrl || document.getElementById('linkPreview').querySelector('img')), collections: cats.length });
+      else Telemetry.track('photo_added', { kind: sharedMediaKind === 'video' || mediaKind === 'video' ? 'video' : 'image', via: addVia });
+      addVia = 'manuel';
       closeAddItem();
       toast('Ajouté au journal');
       await loadItems(); await loadSpaces();
@@ -781,6 +789,7 @@ const App = (() => {
       const ref = leketiaBoardRef(url);
       if (ref) { closeAddItem(); try { await importBoard(ref); } catch (e) { toast(e.message, 'error'); } return; } // page leketia : on l'importe
       document.getElementById('linkUrl').value = url;
+      addVia = 'collage';
       fetchLinkPreview();
     } catch { toast('Lecture du presse-papiers refusée : colle le lien dans le champ', 'error'); }
   }
@@ -914,6 +923,7 @@ const App = (() => {
     document.getElementById('shareExpDate').value = '';
     document.getElementById('shareExpDate').hidden = true;
     lockCache = { pw: '', lock: null };
+    qrTracked = false;
     if (preset) sel.value = preset;
     else if (activeSpace !== 'all' && activeSpace !== 'trash') sel.value = activeSpace;
     document.getElementById('shareNameGroup').hidden = sel.value !== 'sel';
@@ -963,6 +973,8 @@ const App = (() => {
     document.querySelectorAll('.share-tabs .modal-tab').forEach(t => { const on = t.dataset.share === tab; t.classList.toggle('active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
     renderShare();
   }
+  let qrTracked = false; // un QR affiché compte une fois par ouverture de Partager
+  const shareScopeKind = (v) => (!v ? 'journal' : v === 'sel' || isPageKey(v) ? 'selection' : 'collection');
   async function renderShare() {
     const run = ++shareRun;
     const pane = document.getElementById('sharePane');
@@ -994,6 +1006,7 @@ const App = (() => {
       box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
       box.querySelector('svg').setAttribute('aria-label', `QR code : ${board.name}, ${count} liens`);
       pane.append(box);
+      if (!qrTracked) { qrTracked = true; Telemetry.track('share_made', { tab: 'qr', how: 'affiche', scope: shareScopeKind(scopeValue), mdp: !!lock, limite: !!expires, liens: count }); }
       note(count < total
         ? `${count} lien${count > 1 ? 's' : ''} sur ${total} tiennent dans le QR code. Pour tout partager, choisis une collection plus petite ou l’onglet Lien.`
         : `${count} lien${count > 1 ? 's' : ''}. À scanner avec l’appareil photo : la personne ouvre le board et peut l’ajouter à son leketia.${lock ? ' Mot de passe demandé à l’ouverture.' : ''}`);
@@ -1004,15 +1017,16 @@ const App = (() => {
       note(count < total ? `${count} liens sur ${total} tiennent dans un lien. Pour le reste, partage collection par collection.`
         : lock ? `${count} lien${count > 1 ? 's' : ''}, chiffré${count > 1 ? 's' : ''} : il faudra le mot de passe pour l'ouvrir. Envoie le mot de passe par un autre moyen que le lien.`
         : `${count} lien${count > 1 ? 's' : ''} dans le lien. Lisible par une personne et par un agent IA, sans compte.`);
-      if (navigator.share) button('Envoyer le lien', 'btn-primary', async () => { try { await navigator.share({ title: board.name, url }); } catch { /* annulé */ } });
-      button('Copier le lien', navigator.share ? 'btn-ghost' : 'btn-primary', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
+      const shared = (how) => Telemetry.track('share_made', { tab: 'lien', how, scope: shareScopeKind(scopeValue), mdp: !!lock, limite: !!expires, liens: count });
+      if (navigator.share) button('Envoyer le lien', 'btn-primary', async () => { try { await navigator.share({ title: board.name, url }); shared('envoi'); } catch { /* annulé */ } });
+      button('Copier le lien', navigator.share ? 'btn-ghost' : 'btn-primary', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); shared('copie'); } catch { toast('Copie impossible', 'error'); } });
     } else if (shareTab === 'publier') {
       await renderPublish(pane, board, scopeValue || '', run);
     } else {
       const md = ShareCodec.toMarkdown(board);
       const pre = mk('pre', 'share-md'); pre.textContent = md.length > 1200 ? md.slice(0, 1200) + '…' : md; pane.append(pre);
       note(`${total} lien${total > 1 ? 's' : ''} en texte structuré (Markdown). Colle-le dans Claude ou un autre assistant.`);
-      button('Copier pour une IA', 'btn-primary', async () => { try { await navigator.clipboard.writeText(md); toast('Texte copié'); } catch { toast('Copie impossible', 'error'); } });
+      button('Copier pour une IA', 'btn-primary', async () => { try { await navigator.clipboard.writeText(md); toast('Texte copié'); Telemetry.track('share_made', { tab: 'ia', how: 'copie', scope: shareScopeKind(scopeValue), liens: total }); } catch { toast('Copie impossible', 'error'); } });
     }
   }
 
@@ -1175,6 +1189,7 @@ const App = (() => {
     const all = await Store.publications();
     all[key] = { ...pub, fileId, hash: await ShareCodec.pageHash(board), publishedAt: Date.now(), updatedAt: Date.now() };
     await Store.savePublications(all);
+    Telemetry.track('page_published', { scope: scope === 'sel' ? 'selection' : scope ? 'collection' : 'journal', mdp: !!password, limite: !!expires, liens: board.links.length });
     return key;
   }
 
@@ -1195,6 +1210,7 @@ const App = (() => {
     }
     all[key] = { ...next, hash: await ShareCodec.pageHash(board), updatedAt: Date.now() };
     await Store.savePublications(all);
+    Telemetry.track('page_edited', { mdp: !!next.keyRaw, limite: !!next.expires, mdp_change: password !== null });
   }
 
   async function pageFor(pub, board) {
@@ -1239,6 +1255,7 @@ const App = (() => {
     }
     delete all[key];
     await Store.savePublications(all);
+    Telemetry.track('page_removed');
   }
 
   let publishTimer = null;
@@ -1303,6 +1320,7 @@ const App = (() => {
     } else if (!(await showConfirm(`Ajouter ${what} à ton journal ?`, 'Ajouter'))) return;
 
     const { added, skipped, collection } = await Store.importShared(board);
+    Telemetry.track('board_imported', { source: ref.pageId ? 'page' : 'lien', liens: added });
     toast(`${added} ajouté${added > 1 ? 's' : ''} dans « ${collection} »${skipped ? `, ${skipped} déjà présent${skipped > 1 ? 's' : ''}` : ''}`);
     await loadSpaces();
     const space = spaces.find(s => s.name.toLowerCase() === collection.toLowerCase());
@@ -1451,6 +1469,7 @@ const App = (() => {
       const r = await Sync.run();
       if (r && r.error) throw new Error(Sync.state().error);
       toast('Synchronisation activée sur cet appareil');
+      Telemetry.track('sync_on');
       refreshSyncButton();
     } catch (e) { toast(e.message, 'error'); }
     finally { if (btn) btn.disabled = false; refreshSyncZone(); }
@@ -1466,6 +1485,7 @@ const App = (() => {
     await Drive.disconnect();
     refreshSyncButton();
     toast('Synchronisation arrêtée sur cet appareil');
+    Telemetry.track('sync_off');
     refreshSyncZone();
   }
 
@@ -1477,7 +1497,17 @@ const App = (() => {
     document.getElementById('backupFile').open = !on;
     document.getElementById('shareBackupBtn').className = 'btn backup-action ' + (on ? 'btn-ghost' : 'btn-primary');
   }
+  // Mesure d'audience : la personne peut la couper ; « Global Privacy Control » du navigateur la coupe d'office.
+  function refreshMesure() {
+    const box = document.getElementById('mesureToggle');
+    if (!box) return;
+    box.checked = Telemetry.enabled();
+    box.disabled = Telemetry.gpc();
+    document.getElementById('mesureHint').textContent = Telemetry.gpc() ? '(coupée par ton navigateur)' : '(aucun lien ni titre n’est envoyé)';
+  }
+  function mesureChanged(box) { Telemetry.setEnabled(box.checked); toast(box.checked ? 'Mesure d’audience activée' : 'Mesure d’audience coupée : plus rien n’est envoyé'); }
   function showBackup() {
+    refreshMesure();
     refreshDriveButton();
     refreshSyncZone();
     const sel = document.getElementById('backupScope');
@@ -1528,6 +1558,7 @@ const App = (() => {
       await Drive.save(file);
       const note = skippedVideos ? ' (vidéos non incluses)' : '';
       toast(`${count} élément${count > 1 ? 's' : ''} sauvegardé${count > 1 ? 's' : ''} dans Google Drive${note}`);
+      Telemetry.track('backup', { to: 'drive', elements: count });
       refreshBackupHint();
     } catch (e) { toast(e.message, 'error'); }
     finally {
@@ -1569,6 +1600,7 @@ const App = (() => {
       const file = await Drive.download(f.id, f.name);
       const { added, skipped } = await Store.importFile(file);
       toast(`Restauré : ${added} ajouté${added > 1 ? 's' : ''}, ${skipped} déjà présent${skipped > 1 ? 's' : ''}`);
+      Telemetry.track('restore', { from: 'drive', elements: added });
       closeBackup();
       await loadSpaces();
     } catch (e) { toast(e.message, 'error'); }
@@ -1586,6 +1618,7 @@ const App = (() => {
       const { added } = await Store.importFile(await Drive.download(latest.id, latest.name));
       const when = new Date(latest.createdTime).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' });
       toast(`Journal restauré : ${added} élément${added > 1 ? 's' : ''}, sauvegarde du ${when}`);
+      Telemetry.track('restore', { from: 'drive_auto', elements: added });
       await loadSpaces();
     } catch (e) { toast(e.message, 'error'); }
     finally { exporting = false; if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = 'Restaurer depuis Google Drive'; } }
@@ -1599,6 +1632,7 @@ const App = (() => {
     try {
       const { added, skipped } = await Store.importFile(file);
       toast(`${added} ajouté${added > 1 ? 's' : ''}, ${skipped} ignoré${skipped > 1 ? 's' : ''} (déjà présents ou invalides)`);
+      Telemetry.track('restore', { from: 'fichier', elements: added });
       closeBackup();
       await loadSpaces();
     } catch (e) { toast(e.message, 'error'); }
@@ -1898,7 +1932,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, syncTap, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, scopeChanged, shareOptionsChanged, stopSelecting, shareSelection, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace, newCatInline, showPages, closePages,
+  return { loadSpaces, syncTap, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, scopeChanged, shareOptionsChanged, stopSelecting, shareSelection, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace, newCatInline, showPages, closePages, mesureChanged,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

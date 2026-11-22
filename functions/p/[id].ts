@@ -5,6 +5,7 @@
 // Formats : page HTML déjà remplie (humains, agents IA, aperçus WhatsApp), ?format=md (texte), ?format=json (import).
 import { fromPage, toMarkdown, MAX_PAGE_BYTES } from '../../public/share-codec.mjs';
 import { guardedFetch, readCapped } from '../_shared';
+import { withView, type TelemetryEnv } from '../_telemetry';
 import { htmlPage, boardCards, countLabel, escHtml, PAGE_HEADERS, isIos, iosBridge, lockedPage, expiredPage } from '../_board-page';
 
 const FRESH_SECONDS = 120; // délai maximal avant qu'une mise à jour de l'auteur soit visible
@@ -31,7 +32,12 @@ async function readFromDrive(id: string, origin: string) {
   try { return { locked: false as const, board: fromPage(raw) }; } catch { throw new Gone(); }
 }
 
-export async function onRequestGet(context: { request: Request; params: { id: string } }): Promise<Response> {
+type Ctx = { request: Request; params: { id: string }; env: TelemetryEnv; waitUntil?: (p: Promise<unknown>) => void };
+
+// Chaque vue est comptée (type de lecteur, format), sans rien garder sur la personne : voir functions/_telemetry.ts.
+export const onRequestGet = withView<Ctx>('p', handle, (c) => String(c.params.id || ''));
+
+async function handle(context: Ctx): Promise<Response> {
   const url = new URL(context.request.url);
   const id = String(context.params.id || '');
   const gone = () => htmlPage({ title: 'Page introuvable', description: 'Cette page n’est plus publiée.', origin: url.origin, status: 404,
@@ -47,7 +53,9 @@ export async function onRequestGet(context: { request: Request; params: { id: st
   }
   if (read.locked) {
     if (format0) return new Response('Cette page est protégée par un mot de passe : ouvre-la dans un navigateur.\n', { status: 403, headers: { ...PAGE_HEADERS, 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } });
-    return lockedPage({ origin: url.origin, sealed: read.sealed, kind: 'page', canonical: `${url.origin}/p/${id}` });
+    const locked = lockedPage({ origin: url.origin, sealed: read.sealed, kind: 'page', canonical: `${url.origin}/p/${id}` });
+    locked.headers.set('X-Leketia-Locked', '1');
+    return locked;
   }
   const board = read.board;
 

@@ -7,4 +7,4 @@ pages_build_output_dir = "public"
 [vars]
 # Identifiant Google de cette instance, pour la sauvegarde dans Google Drive (public, pas un secret).
 # Chaque instance crée le sien : voir docs/GOOGLE_DRIVE.md. Vide = bouton Drive masqué.
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "959593932591-2meg4t7kpejid9dfrtbric88kiun4c7s.apps.googleusercontent.com"

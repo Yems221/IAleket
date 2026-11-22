@@ -23,15 +23,20 @@ body {
   position: relative;
 }
 
-/* Grain/noise texture overlay (taste-skill: atmospheric depth) */
-body::after {
+/* Papier froissé, en pur CSS : un relief tiré d'un bruit fractal (SVG feTurbulence) éclairé de biais
+   (feDiffuseLighting), posé derrière tout le contenu et fondu dans la couleur du papier. Image calculée une fois. */
+body::before {
   content: '';
   position: fixed; inset: 0;
-  z-index: 9999;
+  z-index: -1;
   pointer-events: none;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0065 0.0095' numOctaves='5' seed='11' stitchTiles='stitch' result='n'/%3E%3CfeDiffuseLighting in='n' lighting-color='%23ffffff' surfaceScale='3.4' diffuseConstant='1.2'%3E%3CfeDistantLight azimuth='225' elevation='55'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
+  background-size: 900px 900px;
+  mix-blend-mode: multiply;
+  opacity: var(--paper-crumple, 0.85);
 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body::before { mix-blend-mode: soft-light; opacity: 0.55; } }
+:root[data-theme="dark"] body::before { mix-blend-mode: soft-light; opacity: 0.55; }
 
 /* Keyboard focus ring (UI/UX Pro Max §1) */
 :focus-visible {
@@ -273,18 +278,17 @@ body.reordering { user-select: none; -webkit-user-select: none; }
 }
 /* Entrée en cascade : au premier affichage seulement (jamais à chaque filtre) */
 .masonry.reveal .card {
-  opacity: 0; transform: translateY(12px);
+  opacity: 0; transform: translate(var(--nx, 0px), 12px) rotate(var(--tilt, 0deg));
   animation: cardReveal 300ms var(--ease-out) forwards;
   animation-delay: min(calc(var(--card-index, 0) * 35ms), 350ms);
 }
 @keyframes cardReveal {
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: translate(var(--nx, 0px), 0) rotate(var(--tilt, 0deg)); }
 }
 @media (hover: hover) and (pointer: fine) {
-  .card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
   .card:hover .card-image { transform: scale(1.04); }
 }
-.card:active { transform: scale(0.99); }
+.card:active { transform: translate(var(--nx, 0px), 0) rotate(var(--tilt, 0deg)) scale(0.99); }
 
 .card-image-wrap {
   position: relative; width: 100%;
@@ -918,3 +922,27 @@ body.selecting .card.is-selected::after { background: var(--accent-fill) url("da
 .empty-state .bitline { display: flex; justify-content: center; gap: 5px; margin: 14px 0 0; }
 .empty-state .bitline i { width: 7px; height: 7px; border-radius: 2px; background: var(--accent); }
 .empty-state .bitline i.o { opacity: .18; }
+
+/* ===== Cartes épinglées sur le papier =====
+   Chaque carte reçoit (dans app.js, d'après son identifiant, donc toujours la même) une légère inclinaison,
+   un petit décalage et une couleur d'épingle. Au survol, elle se redresse et se soulève. */
+.masonry { padding-top: 10px; }
+.card {
+  overflow: visible;
+  transform: translate(var(--nx, 0px), 0) rotate(var(--tilt, 0deg));
+  margin-bottom: calc(var(--s-5) + var(--gap-extra, 0px));
+  box-shadow: 0 0 0 1px var(--border-light), 0 2px 4px rgb(var(--shadow-rgb) / 0.06), 0 10px 22px -10px rgb(var(--shadow-rgb) / 0.28);
+}
+.card .card-image-wrap { border-radius: 16px 16px 0 0; overflow: hidden; }
+.card::before { /* l'épingle */
+  content: ''; position: absolute; top: -7px; left: 50%; z-index: 4; width: 15px; height: 15px; margin-left: -7.5px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.85) 0 2px, transparent 3px), var(--pin, var(--accent-fill));
+  box-shadow: 0 2px 2px rgb(var(--shadow-rgb) / 0.35), 1px 4px 6px rgb(var(--shadow-rgb) / 0.2);
+}
+.card[data-pin="1"] { --pin: var(--navy); }
+.card[data-pin="2"] { --pin: #ffffff; }
+@media (hover: hover) and (pointer: fine) {
+  .card:hover { transform: translate(var(--nx, 0px), -4px) rotate(0deg);
+    box-shadow: 0 0 0 1px var(--border-strong), 0 4px 8px rgb(var(--shadow-rgb) / 0.08), 0 22px 38px -16px rgb(var(--shadow-rgb) / 0.34); }
+}
+@media (prefers-reduced-motion: reduce) { .card, .card:hover { transition: none; } }

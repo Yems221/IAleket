@@ -288,6 +288,12 @@ const App = (() => {
     visible.forEach((item, idx) => {
       const card = mk('div', 'card');
       card.style.setProperty('--card-index', idx);
+      // Posée comme une note épinglée : inclinaison, décalage et épingle tirés de l'identifiant (stables d'un affichage à l'autre).
+      const pinSeed = [...String(item.id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+      card.style.setProperty('--tilt', `${(((pinSeed % 37) / 36) * 3.6 - 1.8).toFixed(2)}deg`);
+      card.style.setProperty('--nx', `${((pinSeed >> 6) % 7) - 3}px`);
+      card.style.setProperty('--gap-extra', `${(pinSeed >> 9) % 13}px`);
+      card.dataset.pin = String((pinSeed >> 13) % 3);
       if (selecting) {
         card.classList.toggle('is-selected', selected.has(item.id));
         card.setAttribute('aria-pressed', selected.has(item.id) ? 'true' : 'false');

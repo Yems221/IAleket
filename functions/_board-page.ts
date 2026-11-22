@@ -64,7 +64,12 @@ h1{font-size:26px;line-height:1.2;margin:0 0 4px;overflow-wrap:anywhere}.meta{co
 .cards{list-style:none;padding:0;margin:0;display:grid;gap:12px}
 .card{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px;align-items:flex-start}
 .card img{width:120px;aspect-ratio:16/9;object-fit:cover;border-radius:10px;flex:none;background:#eee}
-.card div{min-width:0}.card a{color:var(--ink);font-weight:600;text-decoration:none;overflow-wrap:anywhere}.card a:hover{color:var(--blue)}
+.card div{min-width:0}.card a{color:var(--ink);font-weight:600;text-decoration:none;overflow-wrap:anywhere}
+.card{position:relative;transition:transform 120ms cubic-bezier(.23,1,.32,1)}.card a::after{content:"";position:absolute;inset:0;border-radius:16px}.card:active{transform:scale(.99)}
+.btn{transition:transform 120ms cubic-bezier(.23,1,.32,1);-webkit-tap-highlight-color:transparent}.btn:active{transform:scale(.97)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+@media(hover:hover) and (pointer:fine){.card a:hover{color:var(--blue)}}
+@media(prefers-reduced-motion:reduce){.btn,.card{transition:none}}
 .dom{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}.note{margin:4px 0 0;color:var(--muted);font-size:14px;overflow-wrap:anywhere}
 @media (max-width:480px){.card img{width:96px}}
 .bridge{background:#eef2fd;border:1px solid #c9d5f7;border-radius:16px;padding:14px 16px;margin:0 0 20px}.bridge p{margin:6px 0 12px;font-size:14px}.bridge button{border:0;font:inherit;cursor:pointer}

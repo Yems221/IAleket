@@ -400,7 +400,7 @@ const App = (() => {
     const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
     const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';
     if (!filtered && journalEmpty && driveReady) {
-      return `<div class="empty-state"><div class="illustration">${mark}</div><h3>Ton journal est vide</h3><p>Tu avais sauvegardé ton journal dans Google Drive ? Récupère la dernière sauvegarde en un toucher.</p><button class="btn btn-primary" onclick="App.restoreLatest(this)">Restaurer depuis Google Drive</button><button class="btn btn-ghost empty-restore" onclick="App.showAddItem()">Commencer un nouveau journal</button><button class="btn btn-ghost empty-restore" onclick="App.showBackup()">Restaurer depuis un fichier</button></div>`;
+      return `<div class="empty-state"><div class="illustration">${mark}</div><h3>Ton journal est vide</h3><p>Tu avais sauvegardé ton journal dans Google Drive ? Récupère la dernière sauvegarde en un toucher.</p><div class="empty-actions"><button class="btn btn-primary" onclick="App.restoreLatest(this)">Restaurer depuis Google Drive</button><button class="btn btn-ghost" onclick="App.showAddItem()">Commencer un nouveau journal</button><button class="btn btn-ghost" onclick="App.showBackup()">Restaurer depuis un fichier</button></div></div>`;
     }
     const restore = filtered ? '' : '<button class="btn btn-ghost empty-restore" onclick="App.showBackup()">Retrouver mon journal (Google Drive ou fichier)</button>';
     return `<div class="empty-state"><div class="illustration">${mark}</div><h3>${heading}</h3><p>${hint}</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter un lien</button>${restore}</div>`;
@@ -422,12 +422,12 @@ const App = (() => {
   }
 
   // Designed confirm dialog (replaces native confirm())
-  function showConfirm(msg, okLabel = 'Supprimer') {
+  function showConfirm(msg, okLabel = 'Supprimer', { danger = okLabel === 'Supprimer' } = {}) {
     return new Promise((resolve) => {
       confirmResolve = resolve;
       const ok = document.getElementById('confirmOk');
       ok.textContent = okLabel;
-      ok.className = 'btn btn-sm ' + (okLabel === 'Supprimer' ? 'btn-danger' : 'btn-primary');
+      ok.className = 'btn btn-sm ' + (danger ? 'btn-danger' : 'btn-primary');
       document.getElementById('confirmMessage').textContent = msg;
       document.getElementById('confirmDialog').classList.add('active');
       document.getElementById('confirmCancel').focus();
@@ -733,10 +733,14 @@ const App = (() => {
   async function renderShare() {
     const run = ++shareRun;
     const pane = document.getElementById('sharePane');
-    pane.replaceChildren(mk('div', 'spinner'));
+    // Garder la hauteur pendant le calcul, et n'afficher le chargement que s'il dure : la fenêtre ne saute pas.
+    if (pane.offsetHeight) pane.style.minHeight = pane.offsetHeight + 'px';
+    const wait = setTimeout(() => { if (run === shareRun) pane.replaceChildren(mk('div', 'spinner')); }, 150);
     const board = await boardFor(document.getElementById('shareScope').value || null);
+    clearTimeout(wait);
     if (run !== shareRun) return; // un autre choix a été fait entre-temps
     pane.replaceChildren();
+    requestAnimationFrame(() => { if (run === shareRun) pane.style.minHeight = ''; });
     const total = board.links.length;
     const note = (t) => { const p = mk('p', 'hint share-note'); p.textContent = t; pane.append(p); };
     if (!total) { note('Aucun lien à partager ici.'); return; }
@@ -804,7 +808,7 @@ const App = (() => {
     if (navigator.share) button('Envoyer le lien', upToDate ? 'btn-primary' : 'btn-ghost', async () => { try { await navigator.share({ title: board.name, url }); } catch { /* annulé */ } });
     button('Copier le lien', 'btn-ghost', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
     button('Retirer la page', 'btn-ghost share-danger', async () => {
-      if (!(await showConfirm('Retirer cette page ? Le lien ne marchera plus et le fichier sera supprimé de ton Google Drive.', 'Retirer'))) return;
+      if (!(await showConfirm('Retirer cette page ? Le lien ne marchera plus et le fichier sera supprimé de ton Google Drive.', 'Retirer', { danger: true }))) return;
       try { await unpublishScope(scope); toast('Page retirée'); renderShare(); } catch (e) { toast(e.message, 'error'); }
     });
   }

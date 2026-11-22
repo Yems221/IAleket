@@ -990,13 +990,17 @@ const App = (() => {
   }
 
   let publishTimer = null;
-  window.addEventListener('leketia:changed', () => {
+  // Après une modification ici, ou après des changements reçus d'un autre appareil (images, liens) :
+  // les pages publiées depuis cet appareil se mettent à jour.
+  const schedulePublishUpdate = () => {
     clearTimeout(publishTimer);
     publishTimer = setTimeout(async () => {
       const all = await Store.publications();
       for (const scope of Object.keys(all)) { try { await updateScope(scope, false); } catch { /* réessayé à la prochaine modification */ } }
     }, 3000);
-  });
+  };
+  window.addEventListener('leketia:changed', schedulePublishUpdate);
+  window.addEventListener('leketia:synced', schedulePublishUpdate);
 
   // Board reçu par un QR ou un lien (/?import=…) : on montre ce qu'il contient, la personne décide.
   // Sur iPhone, un lien s'ouvre toujours dans Safari, dont la mémoire est séparée de l'app installée :

@@ -116,6 +116,12 @@ Aucune donnée d'usage n'est envoyée nulle part : ces mesures se vérifient à 
   la propose ; sinon guide à étapes par navigateur (Safari 26/27, Chrome iPhone, navigateurs intégrés d'Instagram ou
   TikTok, Samsung/Firefox/Brave renvoyés vers Chrome). Installer depuis Chrome est ce qui fait apparaître leketia
   dans le menu Partager d'Android.
+- **Partage sans stockage.** Le board (ou une collection) est compressé dans le lien lui-même
+  (`/b?d=…`, JSON deflate + base64url). La page `/b` décode et affiche sans rien garder (pas de cache,
+  pas d'indexation). Trois formes : QR code (jusqu'à ~1 500 caractères, une jauge dit combien de liens
+  tiennent), lien (jusqu'à ~15 000 caractères), texte Markdown à coller dans un assistant IA. À la
+  réception, « Ajouter à mon journal » crée une collection du même nom, sans doublon. Les images ne
+  voyagent pas. Un lien partagé ne peut pas être révoqué : c'est une photo du board.
 - **Sauvegarde.** Fichier `.html` contenant un index lisible et les données dans une balise dédiée. Le format
   `.json` est refusé par la feuille de partage d'Android, d'où ce choix. Format versionné (`schemaVersion: 1`).
 - **Import.** Un fichier importé n'est jamais cru sur parole : chaque champ est revérifié, les liens qui ne

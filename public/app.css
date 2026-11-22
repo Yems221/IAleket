@@ -899,3 +899,16 @@ body { background: var(--surface); }
 .backup-file[open] > summary::after { transform: rotate(90deg); }
 .backup-file .form-group { margin-top: var(--s-2); }
 .backup-legal { text-align: center; margin-top: var(--s-3); }
+
+/* ===== Partager ===== */
+.share-btn { min-height: 40px; border-radius: var(--r-full); background: var(--surface-elevated); }
+@media (max-width: 420px) { .share-btn-label { display: none; } .share-btn { padding: 0 12px; } }
+.share-tabs { margin: var(--s-2) 0 var(--s-4); }
+.share-pane { display: grid; gap: var(--s-2); min-height: 120px; align-content: start; }
+.share-pane .spinner { justify-self: center; margin: var(--s-6) 0; }
+.share-qr { justify-self: center; width: min(100%, 300px); aspect-ratio: 1; background: #fff; border-radius: var(--r); padding: 6px; }
+.share-qr svg { width: 100%; height: 100%; display: block; }
+.share-note { text-align: center; margin: 0; line-height: 1.45; }
+.share-md { margin: 0; max-height: 180px; overflow: auto; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--r);
+  font: 12px/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-word; }
+.share-pane .btn { width: 100%; min-height: 44px; }

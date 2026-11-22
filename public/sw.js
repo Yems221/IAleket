@@ -4,7 +4,7 @@
 //    les mises à jour arrivent tout de suite. Icônes : cache d'abord.
 importScripts('/idb.js');
 
-const CACHE_NAME = 'leketia-v10';
+const CACHE_NAME = 'leketia-v11';
 const STATIC_ASSETS = [
   '/',
   '/app.css',
@@ -14,6 +14,8 @@ const STATIC_ASSETS = [
   '/drive.js',
   '/install-parcours.js',
   '/install.js',
+  '/share-codec.mjs',
+  '/vendor/qrcode.js',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -47,6 +49,7 @@ self.addEventListener('fetch', (event) => {
   }
   if (event.request.method !== 'GET') return;
   if (url.pathname.startsWith('/api/')) return; // aperçus : toujours le réseau, jamais de cache
+  if (url.pathname === '/b') return; // board partagé : page du serveur, jamais mise en cache à la place de l'app
 
   if (
     event.request.mode === 'navigate' ||
@@ -100,7 +103,7 @@ function cacheable(request, response) {
   if (!response.ok) return false;
   const type = response.headers.get('content-type') || '';
   const path = new URL(request.url).pathname;
-  if (path.endsWith('.js')) return type.includes('javascript');
+  if (path.endsWith('.js') || path.endsWith('.mjs')) return type.includes('javascript');
   if (path.endsWith('.css')) return type.includes('css');
   if (path.endsWith('.png')) return type.includes('image/');
   return true;

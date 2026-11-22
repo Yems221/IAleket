@@ -330,7 +330,32 @@ const Store = (() => {
     return { added, skipped };
   }
 
+  // Board reçu par QR ou lien : ajouté dans une collection du même nom, sans doublon de lien.
+  async function importShared(board) {
+    const name = text(board.name, 60).trim() || 'Board partagé';
+    const spaces = await allSpaces();
+    let space = spaces.find((s) => s.name.toLowerCase() === name.toLowerCase());
+    if (!space) {
+      space = { id: crypto.randomUUID(), name, sort_order: spaces.length, created_at: nowSql(), updated_at: nowSql() };
+      await idbRun('spaces', 'readwrite', (s) => s.put(space));
+    }
+    const known = new Set((await allItems()).filter((it) => !it.deleted_at).map((it) => it.url));
+    let added = 0, skipped = 0;
+    for (const l of board.links) {
+      const link = safeLink(l.url);
+      if (!link || known.has(link)) { skipped++; continue; }
+      await putItem({
+        id: crypto.randomUUID(), type: 'link', space_id: space.id, space_ids: [space.id],
+        title: text(l.title, 300) || new URL(link).hostname.replace(/^www\./, ''), description: text(l.note, 2000),
+        url: link, image_url: '', price: '', status: 'a_voir', deleted_at: null, created_at: nowSql(), updated_at: nowSql(),
+      });
+      known.add(link);
+      added++;
+    }
+    return { added, skipped, collection: name };
+  }
+
   const lastBackupAt = () => idbRun('meta', 'readonly', (s) => s.get('lastBackupAt'));
 
-  return { api, saveMedia, urlForMedia, kindOf, housekeeping, exportFile, importFile, lastBackupAt, safeLink };
+  return { api, saveMedia, urlForMedia, kindOf, housekeeping, exportFile, importFile, importShared, lastBackupAt, safeLink };
 })();

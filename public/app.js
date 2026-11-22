@@ -25,6 +25,11 @@ const App = (() => {
   // Mêmes appels que dans HomeBoard, servis par le stockage local (store.js).
   const api = (path, opts) => Store.api(path, opts);
 
+  const whenShareCodec = () => new Promise((resolve) => {
+    const check = () => (window.ShareCodec ? resolve() : setTimeout(check, 30));
+    check();
+  });
+
   // ===== Démarrage (pas de compte : les données restent sur l'appareil) =====
   async function start() {
     currentUser = { id: 'local' };
@@ -33,6 +38,8 @@ const App = (() => {
       await Store.housekeeping();
       await loadSpaces();
       refreshBackupHint();
+      await whenShareCodec();
+      handleImportLink();
     } catch (e) {
       document.getElementById('grid').innerHTML = '';
       toast('Le stockage de ce navigateur est indisponible (navigation privée ?)', 'error');
@@ -407,9 +414,12 @@ const App = (() => {
   }
 
   // Designed confirm dialog (replaces native confirm())
-  function showConfirm(msg) {
+  function showConfirm(msg, okLabel = 'Supprimer') {
     return new Promise((resolve) => {
       confirmResolve = resolve;
+      const ok = document.getElementById('confirmOk');
+      ok.textContent = okLabel;
+      ok.className = 'btn btn-sm ' + (okLabel === 'Supprimer' ? 'btn-danger' : 'btn-primary');
       document.getElementById('confirmMessage').textContent = msg;
       document.getElementById('confirmDialog').classList.add('active');
       document.getElementById('confirmCancel').focus();
@@ -633,6 +643,95 @@ const App = (() => {
       document.getElementById('linkUrl').value = url;
       fetchLinkPreview();
     } catch { toast('Lecture du presse-papiers refusée : colle le lien dans le champ', 'error'); }
+  }
+
+  // ===== Partager : QR code, lien autoporteur, texte pour une IA (aucun stockage) =====
+  const QR_MAX = 1500;     // au-delà, un QR affiché sur un écran se scanne mal
+  const LINK_MAX = 15000;  // longueur d'adresse acceptée par l'hébergeur (≈ 16 000 caractères)
+  let shareTab = 'qr';
+  let shareRun = 0;
+
+  async function boardFor(scope) {
+    const path = scope ? '/api/spaces/' + encodeURIComponent(scope) + '/items' : '/api/items';
+    const its = (await api(path)).items.filter(it => it.url);
+    const name = scope ? (spaces.find(s => s.id === scope) || {}).name : 'Mon journal';
+    return { name: name || 'Mon journal', date: new Date().toISOString().slice(0, 10), links: its.map(it => ({ title: it.title, url: it.url, note: it.description })) };
+  }
+  // Le plus grand début du board dont le lien tient dans la limite (recherche par dichotomie).
+  async function fitBoard(board, max) {
+    const url = async (n) => `${location.origin}/b?d=${await ShareCodec.encode({ ...board, links: board.links.slice(0, n) })}`;
+    let full = await url(board.links.length);
+    if (full.length <= max) return { url: full, count: board.links.length };
+    let lo = 0, hi = board.links.length;
+    while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if ((await url(mid)).length <= max) lo = mid; else hi = mid - 1; }
+    return { url: await url(lo), count: lo };
+  }
+  function showShare() {
+    const sel = document.getElementById('shareScope');
+    sel.replaceChildren(new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id)));
+    if (activeSpace !== 'all' && activeSpace !== 'trash') sel.value = activeSpace;
+    document.getElementById('shareModal').classList.add('active');
+    setShareTab(shareTab);
+  }
+  function closeShare() { document.getElementById('shareModal').classList.remove('active'); }
+  function setShareTab(tab) {
+    shareTab = tab;
+    document.querySelectorAll('.share-tabs .modal-tab').forEach(t => { const on = t.dataset.share === tab; t.classList.toggle('active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
+    renderShare();
+  }
+  async function renderShare() {
+    const run = ++shareRun;
+    const pane = document.getElementById('sharePane');
+    pane.replaceChildren(mk('div', 'spinner'));
+    const board = await boardFor(document.getElementById('shareScope').value || null);
+    if (run !== shareRun) return; // un autre choix a été fait entre-temps
+    pane.replaceChildren();
+    const total = board.links.length;
+    const note = (t) => { const p = mk('p', 'hint share-note'); p.textContent = t; pane.append(p); };
+    if (!total) { note('Aucun lien à partager ici.'); return; }
+    const button = (label, cls, fn) => { const b = mk('button', 'btn ' + cls); b.type = 'button'; b.textContent = label; b.addEventListener('click', fn); pane.append(b); return b; };
+
+    if (shareTab === 'qr') {
+      const { url, count } = await fitBoard(board, QR_MAX);
+      if (run !== shareRun) return;
+      if (!count) { note('Le premier lien est trop long pour un QR code. Utilise l’onglet Lien.'); return; }
+      const qr = qrcode(0, 'L');
+      qr.addData(url, 'Byte');
+      qr.make();
+      const box = mk('div', 'share-qr');
+      box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+      box.querySelector('svg').setAttribute('aria-label', `QR code : ${board.name}, ${count} liens`);
+      pane.append(box);
+      note(count < total
+        ? `${count} lien${count > 1 ? 's' : ''} sur ${total} tiennent dans le QR code. Pour tout partager, choisis une collection plus petite ou l’onglet Lien.`
+        : `${count} lien${count > 1 ? 's' : ''}. À scanner avec l’appareil photo : la personne ouvre le board et peut l’ajouter à son leketia.`);
+    } else if (shareTab === 'lien') {
+      const { url, count } = await fitBoard(board, LINK_MAX);
+      if (run !== shareRun) return;
+      note(count < total ? `${count} liens sur ${total} tiennent dans un lien. Pour le reste, partage collection par collection.` : `${count} lien${count > 1 ? 's' : ''} dans le lien. Lisible par une personne et par un agent IA, sans compte.`);
+      if (navigator.share) button('Envoyer le lien', 'btn-primary', async () => { try { await navigator.share({ title: board.name, url }); } catch { /* annulé */ } });
+      button('Copier le lien', navigator.share ? 'btn-ghost' : 'btn-primary', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
+    } else {
+      const md = ShareCodec.toMarkdown(board);
+      const pre = mk('pre', 'share-md'); pre.textContent = md.length > 1200 ? md.slice(0, 1200) + '…' : md; pane.append(pre);
+      note(`${total} lien${total > 1 ? 's' : ''} en texte structuré (Markdown). Colle-le dans Claude ou un autre assistant.`);
+      button('Copier pour une IA', 'btn-primary', async () => { try { await navigator.clipboard.writeText(md); toast('Texte copié'); } catch { toast('Copie impossible', 'error'); } });
+    }
+  }
+
+  // Board reçu par un QR ou un lien (/?import=…) : on montre ce qu'il contient, la personne décide.
+  async function handleImportLink() {
+    const d = new URLSearchParams(location.search).get('import');
+    if (!d) return;
+    history.replaceState({}, '', '/');
+    try {
+      const board = await ShareCodec.decode(d);
+      const ok = await showConfirm(`Ajouter « ${board.name} » (${board.links.length} lien${board.links.length > 1 ? 's' : ''}) à ton journal ?`, 'Ajouter');
+      if (!ok) return;
+      const { added, skipped, collection } = await Store.importShared(board);
+      toast(`${added} ajouté${added > 1 ? 's' : ''} dans « ${collection} »${skipped ? `, ${skipped} déjà présent${skipped > 1 ? 's' : ''}` : ''}`);
+      await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
   }
 
   // ===== Sauvegarde : export, envoi, import =====
@@ -1062,7 +1161,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, pasteLink, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

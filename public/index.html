@@ -21,7 +21,7 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 
   <!-- Fonts -->
-  <link rel="stylesheet" href="/app.css?v=8">
+  <link rel="stylesheet" href="/app.css?v=9">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
@@ -35,6 +35,7 @@
   <nav class="navbar" role="navigation" aria-label="Navigation principale">
     <div class="navbar-brand"><img class="brand-mark" src="/brand/leketia-mark.webp" alt="" width="48" height="48"> leketia</div>
     <div class="navbar-right">
+      <button class="btn btn-sm btn-ghost share-btn" onclick="App.showShare()" aria-label="Partager"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg><span class="share-btn-label">Partager</span></button>
       <button class="btn btn-sm btn-ghost backup-btn" id="backupBtn" onclick="App.showBackup()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Sauvegarde<span class="backup-dot" aria-hidden="true"></span>
@@ -189,6 +190,27 @@
   </div>
 </div>
 
+<!-- ===== PARTAGER : QR, lien, texte pour une IA (aucun stockage) ===== -->
+<div class="modal-overlay" id="shareModal" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+  <div class="modal">
+    <button class="modal-close" onclick="App.closeShare()" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <h2 id="shareTitle">Partager</h2>
+    <p class="backup-explain">Tout le contenu voyage dans le QR code ou le lien : rien n'est stocké nulle part.</p>
+    <div class="form-group">
+      <label for="shareScope">Quoi partager ?</label>
+      <select id="shareScope" onchange="App.renderShare()"></select>
+    </div>
+    <div class="modal-tabs share-tabs" role="tablist">
+      <button class="modal-tab active" data-share="qr" role="tab" aria-selected="true" onclick="App.setShareTab('qr')">QR code</button>
+      <button class="modal-tab" data-share="lien" role="tab" aria-selected="false" onclick="App.setShareTab('lien')">Lien</button>
+      <button class="modal-tab" data-share="ia" role="tab" aria-selected="false" onclick="App.setShareTab('ia')">Pour une IA</button>
+    </div>
+    <div class="share-pane" id="sharePane" aria-live="polite"></div>
+  </div>
+</div>
+
 <!-- ===== CONFIRMATION DIALOG ===== -->
 <div class="confirm-overlay" id="confirmDialog" role="alertdialog" aria-modal="true">
   <div class="confirm-dialog">
@@ -216,10 +238,12 @@
 <div class="toast-container" id="toasts" aria-live="polite" aria-atomic="true"></div>
 
 <script src="/idb.js?v=1"></script>
-<script src="/store.js?v=1"></script>
+<script src="/store.js?v=2"></script>
 <script src="/drive.js?v=2"></script>
 <script src="/install-parcours.js?v=1"></script>
 <script src="/install.js?v=3"></script>
-<script src="/app.js?v=7"></script>
+<script src="/vendor/qrcode.js"></script>
+<script type="module">import * as ShareCodec from "/share-codec.mjs"; window.ShareCodec = ShareCodec;</script>
+<script src="/app.js?v=8"></script>
 </body>
 </html>

@@ -15,6 +15,9 @@ X, Instagram, YouTube, TikTok ou Pinterest, il devient une carte avec aperçu, e
 - Garde tout dans le navigateur de l'appareil : pas de compte, pas de base de données.
 - Sauvegarde le journal dans un fichier à s'envoyer (Telegram, Drive, e-mail) et à réimporter.
 
+- Partage d'un board ou d'une collection **sans aucun stockage** : QR code, lien, ou texte « pour une IA ».
+  Tout le contenu voyage dans le lien ; la page `/b` le décode et l'affiche, lisible par une personne
+  comme par un agent IA (`/b?format=md&d=…` renvoie du Markdown).
 - Sauvegarde dans Google Drive, d'un toucher, si l'instance a son identifiant Google ([guide](docs/GOOGLE_DRIVE.md)).
 
 Pas encore fait : partage rapide depuis iPhone.

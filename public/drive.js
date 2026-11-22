@@ -63,23 +63,30 @@ const Drive = (() => {
     return res.json();
   }
 
-  // Dossier « leketia » dans le Drive. drive.file ne voit que ce que leketia a créé : on retrouve
-  // le dossier par son identifiant mémorisé, sinon on en crée un.
+  // Dossier « leketia » dans le Drive. drive.file ne voit que ce que leketia a créé, mais le voit depuis
+  // n'importe quel appareil : on réutilise l'identifiant mémorisé, sinon on cherche un dossier leketia
+  // existant (le plus ancien), et seulement s'il n'y en a aucun on le crée. Pas de doublon d'un appareil à l'autre.
   async function folderId(accessToken) {
     const known = await idbRun('meta', 'readonly', (s) => s.get(FOLDER_KEY));
     if (known) {
       try {
         const f = await api(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(known)}?fields=id,trashed`, accessToken);
         if (!f.trashed) return f.id;
-      } catch { /* dossier supprimé ou inaccessible : on en recrée un */ }
+      } catch { /* dossier supprimé ou inaccessible : on cherche ou on recrée */ }
     }
-    const created = await api('https://www.googleapis.com/drive/v3/files?fields=id', accessToken, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: FOLDER, mimeType: 'application/vnd.google-apps.folder' }),
-    });
-    await idbRun('meta', 'readwrite', (s) => s.put(created.id, FOLDER_KEY));
-    return created.id;
+    const q = `name = '${FOLDER}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+    const found = await api(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=createdTime&pageSize=1&fields=files(id)&spaces=drive`, accessToken);
+    let id = found.files && found.files[0] && found.files[0].id;
+    if (!id) {
+      const created = await api('https://www.googleapis.com/drive/v3/files?fields=id', accessToken, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: FOLDER, mimeType: 'application/vnd.google-apps.folder' }),
+      });
+      id = created.id;
+    }
+    await idbRun('meta', 'readwrite', (s) => s.put(id, FOLDER_KEY));
+    return id;
   }
 
   // Envoie le fichier dans le dossier leketia. Chaque sauvegarde est un nouveau fichier daté :

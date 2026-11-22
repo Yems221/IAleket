@@ -430,7 +430,20 @@ const App = (() => {
   }
 
   // ===== Add Item Modal =====
+  // Comment faire arriver un lien ici depuis une autre appli, selon le téléphone.
+  function shareHintText() {
+    const p = Install.parcours, installed = Install.ouverteInstallee();
+    if (p.startsWith('ios')) return 'Sur iPhone : dans l’appli (Instagram, X, YouTube…), touche Partager puis Copier le lien, reviens ici et touche Coller le lien.';
+    if (p === 'android' || p === 'android-autre') return installed
+      ? 'Depuis une autre appli : touche Partager, puis choisis leketia.'
+      : 'Installe leketia depuis Chrome : elle apparaîtra dans le menu Partager de tes applis.';
+    if (p === 'integre') return 'Ouvre cette page dans ton navigateur pour installer leketia.';
+    return '';
+  }
   function showAddItem() {
+    const hint = document.getElementById('shareHint');
+    hint.textContent = shareHintText();
+    hint.hidden = !hint.textContent;
     if (spaces.length === 0) { toast('Crée d\'abord une collection', 'error'); showAddSpace(); return; }
     const s = activeSpace !== 'all' ? spaces.find(x => x.id === activeSpace) : spaces[0];
     document.getElementById('addItemTitle').textContent = 'Ajouter au journal';

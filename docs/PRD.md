@@ -111,6 +111,11 @@ Aucune donnée d'usage n'est envoyée nulle part : ces mesures se vérifient à 
   de lecture aux couleurs de la plateforme.
 - **Partage Android.** Le service worker reçoit le partage sur l'appareil. Une fonction serveur prend le
   relais au tout premier lancement, pour les liens seulement.
+- **Installation.** Protocole repris de l'app de la Biennale de Dakar (vérifié sur de vrais téléphones) : bannière
+  sous la barre du haut sur téléphone tant que l'app n'est pas installée ; fenêtre d'installation de Chrome quand il
+  la propose ; sinon guide à étapes par navigateur (Safari 26/27, Chrome iPhone, navigateurs intégrés d'Instagram ou
+  TikTok, Samsung/Firefox/Brave renvoyés vers Chrome). Installer depuis Chrome est ce qui fait apparaître leketia
+  dans le menu Partager d'Android.
 - **Sauvegarde.** Fichier `.html` contenant un index lisible et les données dans une balise dédiée. Le format
   `.json` est refusé par la feuille de partage d'Android, d'où ce choix. Format versionné (`schemaVersion: 1`).
 - **Import.** Un fichier importé n'est jamais cru sur parole : chaque champ est revérifié, les liens qui ne

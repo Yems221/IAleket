@@ -831,3 +831,47 @@ body { background: var(--surface); }
   .masonry { column-gap: var(--s-3); }
   .card { margin-bottom: var(--s-3); }
 }
+
+/* ===== Installation (protocole repris de l'app de la Biennale) =====
+   Registre « réglage du téléphone » : gris système, coins arrondis, cibles de 44 px. */
+.install-banniere { position: sticky; top: 64px; z-index: calc(var(--z-sticky) - 1); display: grid; gap: 8px;
+  padding: 8px var(--s-4); background: #f1f0ee; border-bottom: 1px solid var(--border-light); color: var(--ink); }
+.install-ligne { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 4px; }
+.install-bouton { grid-column: 2; width: 100%; min-height: 44px; border-radius: 12px; background: var(--surface-elevated);
+  color: var(--ink); border: 1px solid var(--border-strong); font-size: 14px; font-weight: 600; }
+.install-bouton { animation: install-rebond 900ms ease-in-out 600ms 3; }
+@keyframes install-rebond { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-7px); } 55% { transform: translateY(0); } 75% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .install-bouton { animation: none; } }
+.install-fermer { grid-column: 3; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--ink-secondary); cursor: pointer; }
+.install-rappel, .install-fait { margin: 0; font-size: 13px; text-align: center; }
+.share-hint { margin: -6px 0 var(--s-4); line-height: 1.45; }
+
+/* Guide à étapes : fenêtre blanche, une étape par vue ; le geste à faire est cerclé. */
+.gi { width: min(100%, 480px); max-width: 100%; max-height: 100dvh; margin: auto auto 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  border: 0; border-radius: 20px 20px 0 0; background: #fff; color: #000; }
+.gi::backdrop { background: rgba(0,0,0,0.35); }
+.gi-tete { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.gi-tete h2 { margin: 0; font-family: var(--font-display); font-size: 18px; }
+.gi-fermer { position: static; flex: none; }
+.gi-nav { margin: 2px 0 0; color: var(--ink-secondary); font-size: 13px; }
+.gi-compte { margin: 14px 0 6px; font-size: 13px; font-weight: 700; }
+.gi-points { display: flex; gap: 6px; margin-bottom: 16px; }
+.gi-points i { flex: 1; height: 4px; border-radius: 2px; background: #ddd; }
+.gi-points i.is-on { background: var(--accent); }
+.gi-etape { display: grid; gap: 14px; min-height: 150px; align-content: start; }
+.gi-texte { margin: 0; font-size: 1.125rem; line-height: 1.4; font-weight: 600; }
+.gi-barre { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #e6e6e6; border-radius: 16px; }
+.gi-url { flex: 1; min-width: 0; height: 36px; border-radius: 18px; background: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: #444; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 10px; }
+.gi-rond { width: 40px; height: 40px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #333; }
+.gi-url .gi-menu { width: 26px; height: 26px; min-width: 26px; margin-right: 8px; font-size: 16px; }
+.gi-ligne { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px;
+  background: #f7f7f7; border: 1px solid #ddd; border-radius: 12px; color: #111; }
+.gi-cible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.gi-bascule { width: 44px; height: 26px; border-radius: 13px; background: #34c759; position: relative; flex: none; }
+.gi-bascule::after { content: ""; position: absolute; right: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; }
+.gi-extra { display: grid; gap: 10px; }
+.gi-extra:empty { display: none; }
+.gi-note { margin: 0; font-size: 13px; color: var(--ink-secondary); }
+.gi-actions { display: grid; gap: 10px; margin-top: 20px; }
+.gi-actions .btn, .gi-extra .btn { width: 100%; min-height: 48px; }

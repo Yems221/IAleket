@@ -44,7 +44,7 @@ def facets(G, amp, warp):
                  h11 + (1 - fu) * (h01 - h11) + (1 - fv) * (h10 - h11))
     return amp * np.where(diag[j, i], a, b) / G
 
-H = facets(5, 1.0, 0.9 / 5) + facets(13, 0.3, 0.9 / 13)
+H = facets(8, 1.0, 0.9 / 8) + facets(21, 0.5, 0.9 / 21) + facets(47, 0.2, 0.9 / 47)
 
 gx = (np.roll(H, -1, 1) - np.roll(H, 1, 1)) * N / 2
 gy = (np.roll(H, -1, 0) - np.roll(H, 1, 0)) * N / 2
@@ -55,6 +55,6 @@ light = np.array([-0.45, -0.6, 0.66]); light /= np.linalg.norm(light)
 shade = (nx * light[0] + ny * light[1] + nz * light[2]) / norm
 shade = (shade - np.median(shade)) / shade.std()
 
-gray = np.clip(245 + shade * 6, 222, 255).astype(np.uint8)
+gray = np.clip(241 + shade * 13, 188, 255).astype(np.uint8)
 Image.fromarray(gray, 'L').save('public/brand/paper-crumple.webp', 'WEBP', quality=82, method=6)
 print('ok', gray.min(), int(np.median(gray)), gray.max())

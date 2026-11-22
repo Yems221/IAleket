@@ -30,7 +30,7 @@ body::before {
   position: fixed; inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: url("/brand/paper-crumple.webp?v=2") 0 0 / 1024px 1024px repeat;
+  background: url("/brand/paper-crumple.webp") 0 0 / 1024px 1024px repeat;
   mix-blend-mode: multiply;
   opacity: var(--paper-crumple, 1);
 }

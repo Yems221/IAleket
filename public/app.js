@@ -387,7 +387,8 @@ const App = (() => {
     if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${mark}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
     const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
     const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';
-    return `<div class="empty-state"><div class="illustration">${mark}</div><h3>${heading}</h3><p>${hint}</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter un lien</button></div>`;
+    const restore = filtered ? '' : '<button class="btn btn-ghost empty-restore" onclick="App.showBackup()">Retrouver mon journal (Google Drive ou fichier)</button>';
+    return `<div class="empty-state"><div class="illustration">${mark}</div><h3>${heading}</h3><p>${hint}</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter un lien</button>${restore}</div>`;
   }
 
   function showItemActions(e, id) {
@@ -651,7 +652,8 @@ const App = (() => {
   // Le bouton Drive n'apparaît que si l'instance a son identifiant Google ; il passe alors en premier.
   async function refreshDriveButton() {
     const on = await Drive.available();
-    document.getElementById('driveBackupBtn').hidden = !on;
+    document.getElementById('driveZone').hidden = !on;
+    document.getElementById('driveList').hidden = true;
     document.getElementById('shareBackupBtn').className = 'btn backup-action ' + (on ? 'btn-ghost' : 'btn-primary');
   }
   function showBackup() {
@@ -696,17 +698,57 @@ const App = (() => {
     exporting = true;
     document.querySelectorAll('#backupModal .backup-action').forEach(b => { b.disabled = true; });
     try {
-      const { file, count, skippedVideos } = await Store.exportFile(document.getElementById('backupScope').value || null);
-      if (count === 0) { toast('Rien à sauvegarder dans cette sélection', 'error'); return; }
-      const sent = await Drive.save(file);
-      const note = skippedVideos ? ` (vidéos non incluses)` : '';
-      toast(`${count} élément${count > 1 ? 's' : ''} sauvegardé${count > 1 ? 's' : ''} dans Google Drive, dossier « leketia »${note}`);
-      if (sent.link) document.getElementById('backupStatus').textContent = `Dernière sauvegarde : aujourd’hui, ${sent.name}.`;
+      // Toujours le journal entier : la sauvegarde la plus récente doit suffire à tout restaurer.
+      const { file, count, skippedVideos } = await Store.exportFile(null);
+      if (count === 0) { toast('Ton journal est vide : rien à sauvegarder', 'error'); return; }
+      await Drive.save(file);
+      const note = skippedVideos ? ' (vidéos non incluses)' : '';
+      toast(`${count} élément${count > 1 ? 's' : ''} sauvegardé${count > 1 ? 's' : ''} dans Google Drive${note}`);
+      refreshBackupHint();
     } catch (e) { toast(e.message, 'error'); }
     finally {
       exporting = false;
       document.querySelectorAll('#backupModal .backup-action').forEach(b => { b.disabled = false; });
     }
+  }
+  // Restauration : les sauvegardes de ce compte Google, quel que soit l'appareil qui les a faites.
+  // Importer fusionne : ce qui manque est ajouté, ce qui existe déjà est laissé tel quel.
+  async function driveRestoreList() {
+    if (exporting) return;
+    const list = document.getElementById('driveList');
+    exporting = true;
+    try {
+      const files = await Drive.list();
+      list.replaceChildren();
+      if (!files.length) {
+        list.append(mk('li', 'drive-empty')); list.lastChild.textContent = 'Aucune sauvegarde dans le Google Drive de ce compte.';
+      }
+      files.forEach((f, i) => {
+        const li = mk('li');
+        const b = mk('button', 'drive-item');
+        b.type = 'button';
+        const when = new Date(f.createdTime).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' });
+        const size = f.size ? ` · ${Math.max(1, Math.round(Number(f.size) / 1024))} Ko` : '';
+        b.textContent = `${i === 0 ? 'La plus récente : ' : ''}${when}${size}`;
+        b.addEventListener('click', () => driveRestore(f));
+        li.append(b);
+        list.append(li);
+      });
+      list.hidden = false;
+    } catch (e) { toast(e.message, 'error'); }
+    finally { exporting = false; }
+  }
+  async function driveRestore(f) {
+    if (exporting) return;
+    exporting = true;
+    try {
+      const file = await Drive.download(f.id, f.name);
+      const { added, skipped } = await Store.importFile(file);
+      toast(`Restauré : ${added} ajouté${added > 1 ? 's' : ''}, ${skipped} déjà présent${skipped > 1 ? 's' : ''}`);
+      closeBackup();
+      await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { exporting = false; }
   }
   const downloadBackup = () => runExport(false);
   const shareBackup = () => runExport(true);
@@ -1016,7 +1058,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, pasteLink, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, pasteLink, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

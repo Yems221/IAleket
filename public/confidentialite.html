@@ -45,9 +45,10 @@
 
   <h2>Google Drive (facultatif)</h2>
   <ul>
-    <li>Si tu choisis « Sauvegarder dans Google Drive », leketia te demande, via la connexion Google, l'accès <strong>aux seuls fichiers qu'elle crée</strong> dans ton Drive (autorisation <code>drive.file</code>). Elle ne voit ni ne lit le reste de ton Drive.</li>
-    <li>leketia y crée un dossier « leketia » et y dépose tes fichiers de sauvegarde. Ces fichiers vont directement de ton navigateur à ton Drive : ils ne passent pas par le serveur de leketia.</li>
-    <li>L'autorisation donnée par Google est gardée en mémoire le temps de la session, jamais enregistrée. Tu peux la retirer à tout moment dans les <a href="https://myaccount.google.com/permissions" rel="noopener">autorisations de ton compte Google</a>.</li>
+    <li>Si tu choisis « Sauvegarder dans Google Drive », leketia te demande, via la connexion Google, l'accès à <strong>son propre espace caché</strong> dans ton Drive (autorisation <code>drive.appdata</code>). Elle ne voit ni ne lit le reste de ton Drive, et les autres applications ne voient pas cet espace.</li>
+    <li>Chaque sauvegarde contient tout ton journal. leketia garde les 10 plus récentes et supprime les plus anciennes.</li>
+    <li>Ces sauvegardes ne s'affichent pas dans la liste de tes fichiers Drive. Tu peux les restaurer depuis leketia sur n'importe quel appareil connecté au même compte Google, et les supprimer à tout moment dans Google Drive : Paramètres, Gérer les applications, leketia, « Supprimer les données cachées de l'application ».</li>
+    <li>Les fichiers vont directement de ton navigateur à ton Drive : ils ne passent pas par le serveur de leketia. L'autorisation donnée par Google est gardée en mémoire le temps de la session, jamais enregistrée. Tu peux la retirer à tout moment dans les <a href="https://myaccount.google.com/permissions" rel="noopener">autorisations de ton compte Google</a>.</li>
     <li>L'utilisation des informations reçues des API Google respecte le <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Règlement sur les données utilisateur des services d'API Google</a>, y compris les exigences d'usage limité.</li>
   </ul>
 

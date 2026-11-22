@@ -36,6 +36,7 @@ Pas encore fait : partage rapide depuis iPhone.
 - [Cahier des charges](docs/PRD.md) : problème, solution, décisions, questions ouvertes.
 - [Notes de design](docs/DESIGN.md) : revue des animations, états des composants.
 - [Sauvegarde Google Drive](docs/GOOGLE_DRIVE.md) : créer l'identifiant Google de ton instance.
+- [Confidentialité](public/confidentialite.html) : ce que l'app garde et envoie (en ligne : /confidentialite.html).
 
 ## Origine
 

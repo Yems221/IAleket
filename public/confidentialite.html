@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Confidentialité — leketia</title>
+  <meta name="description" content="Ce que leketia garde, ce qu'elle envoie, et à qui.">
+  <link rel="icon" type="image/svg+xml" href="/brand/leketia-favicon.svg">
+  <style>
+    :root { --ink: #1c1917; --muted: #6b6660; --blue: #1F4BC9; --bg: #faf7f2; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
+    header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+    header img { width: 44px; height: 44px; }
+    header a { color: var(--ink); text-decoration: none; font-weight: 700; font-size: 20px; letter-spacing: -0.03em; }
+    h1 { font-size: 28px; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 8px; }
+    h2 { font-size: 19px; margin: 32px 0 8px; }
+    p, li { margin: 0 0 10px; }
+    ul { padding-left: 20px; }
+    a { color: var(--blue); }
+    .date { color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+<main>
+  <header><img src="/brand/leketia-mark.webp" alt="" width="44" height="44"><a href="/">leketia</a></header>
+  <h1>Confidentialité</h1>
+  <p class="date">Mise à jour le 22 novembre 2026.</p>
+
+  <p>leketia est un journal de liens personnel et open source. Il est conçu pour que tes données restent chez toi.</p>
+
+  <h2>Ce que leketia garde, et où</h2>
+  <ul>
+    <li>Les liens, titres, notes, collections, images et vidéos que tu ajoutes sont enregistrés <strong>uniquement sur ton appareil</strong>, dans le stockage de ton navigateur.</li>
+    <li>leketia n'a pas de compte utilisateur et pas de base de données sur un serveur. Personne d'autre que toi n'y a accès.</li>
+    <li>Si tu effaces les données du site ou désinstalles l'application, ton journal est supprimé de l'appareil.</li>
+  </ul>
+
+  <h2>Ce qui passe par le serveur de leketia</h2>
+  <ul>
+    <li>Pour afficher l'aperçu d'un lien (titre, image), l'adresse du lien est envoyée au serveur de leketia, qui lit la page publique correspondante et renvoie l'aperçu. Rien n'est conservé ni journalisé.</li>
+    <li>Un lien partagé depuis une autre application peut transiter par ce serveur pour être transmis à l'app. Il n'y est pas conservé.</li>
+  </ul>
+
+  <h2>Google Drive (facultatif)</h2>
+  <ul>
+    <li>Si tu choisis « Sauvegarder dans Google Drive », leketia te demande, via la connexion Google, l'accès <strong>aux seuls fichiers qu'elle crée</strong> dans ton Drive (autorisation <code>drive.file</code>). Elle ne voit ni ne lit le reste de ton Drive.</li>
+    <li>leketia y crée un dossier « leketia » et y dépose tes fichiers de sauvegarde. Ces fichiers vont directement de ton navigateur à ton Drive : ils ne passent pas par le serveur de leketia.</li>
+    <li>L'autorisation donnée par Google est gardée en mémoire le temps de la session, jamais enregistrée. Tu peux la retirer à tout moment dans les <a href="https://myaccount.google.com/permissions" rel="noopener">autorisations de ton compte Google</a>.</li>
+    <li>L'utilisation des informations reçues des API Google respecte le <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Règlement sur les données utilisateur des services d'API Google</a>, y compris les exigences d'usage limité.</li>
+  </ul>
+
+  <h2>Partage et envoi de fichiers</h2>
+  <p>Quand tu envoies une sauvegarde vers Telegram, l'e-mail ou une autre application, c'est le système de partage de ton téléphone qui s'en charge : leketia ne voit pas où le fichier part.</p>
+
+  <h2>Ce que leketia ne fait pas</h2>
+  <ul>
+    <li>Aucune statistique d'usage, aucun traceur publicitaire, aucune revente de données.</li>
+    <li>Aucune donnée personnelle n'est transmise à des tiers, en dehors de Google Drive si tu l'utilises.</li>
+  </ul>
+
+  <h2>Code source et contact</h2>
+  <p>Le code de leketia est public, sous licence AGPL : <a href="https://github.com/Yems221/leketia">github.com/Yems221/leketia</a>. Pour toute question sur cette page, ouvre un ticket sur ce dépôt.</p>
+</main>
+</body>
+</html>

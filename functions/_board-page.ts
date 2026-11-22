@@ -14,7 +14,7 @@ export const PAGE_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
 };
 
-const csp = (nonce: string) => `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+const csp = (nonce: string) => `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; script-src 'nonce-${nonce}' 'strict-dynamic'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 
 /** Sur iPhone, un lien s'ouvre toujours dans Safari, jamais dans l'app installée, dont la mémoire est séparée.
  * Le pont sans serveur : copier le lien ici, puis « Coller le lien » dans l'app, qui reconnaît une page leketia. */
@@ -39,10 +39,11 @@ function youtubeId(raw: string): string {
 
 const domain = (raw: string) => { try { return new URL(raw).hostname.replace(/^www\./, ''); } catch { return ''; } };
 
-export function htmlPage(opts: { title: string; description: string; origin: string; canonical?: string; body: string; status?: number; extraHead?: string; cache?: string }): Response {
-  const { title, description, origin, canonical, body, status = 200, extraHead = '', cache = 'no-store' } = opts;
+export function htmlPage(opts: { title: string; description: string; origin: string; canonical?: string; body: string; status?: number; extraHead?: string; cache?: string; module?: string }): Response {
+  const { title, description, origin, canonical, body, status = 200, extraHead = '', cache = 'no-store', module = '' } = opts;
   const nonce = crypto.randomUUID().replace(/-/g, '');
-  const script = body.includes('id="copyLink"') ? `<script nonce="${nonce}">document.getElementById('copyLink').addEventListener('click',async function(){try{await navigator.clipboard.writeText(this.dataset.url);this.textContent='Lien copié : ouvre leketia';}catch(e){this.textContent='Copie impossible : copie l’adresse de la page';}});</script>` : '';
+  const moduleTag = module ? `<script type="module" nonce="${nonce}" src="${module}"></script>` : '';
+  const script = moduleTag + (body.includes('id="copyLink"') ? `<script nonce="${nonce}">document.getElementById('copyLink').addEventListener('click',async function(){try{await navigator.clipboard.writeText(this.dataset.url);this.textContent='Lien copié : ouvre leketia';}catch(e){this.textContent='Copie impossible : copie l’adresse de la page';}});</script>` : '');
   const t = escHtml(title);
   const d = escHtml(description);
   return new Response(`<!doctype html><html lang="fr"><head><meta charset="utf-8">
@@ -72,6 +73,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offse
 @media(prefers-reduced-motion:reduce){.btn,.card{transition:none}}
 .dom{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}.note{margin:4px 0 0;color:var(--muted);font-size:14px;overflow-wrap:anywhere}
 @media (max-width:480px){.card img{width:96px}}
+.lock{display:grid;gap:12px;max-width:360px}.lock input{min-height:44px;padding:0 14px;border:1px solid #d6d3d1;border-radius:12px;font:inherit;background:#fff}.lock button{border:0;font:inherit;cursor:pointer;justify-content:center}.lock-err{color:#b42318;font-size:14px;min-height:20px;margin:0}
 .bridge{background:#eef2fd;border:1px solid #c9d5f7;border-radius:16px;padding:14px 16px;margin:0 0 20px}.bridge p{margin:6px 0 12px;font-size:14px}.bridge button{border:0;font:inherit;cursor:pointer}
 </style></head><body><main><header><img src="/brand/leketia-mark.webp" alt="" width="40" height="40"><a href="/">leketia</a></header>${body}</main>${script}</body></html>`,
     { status, headers: { ...PAGE_HEADERS, Vary: 'User-Agent', 'Cache-Control': cache, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp(nonce) } });
@@ -88,3 +90,21 @@ export function boardCards(board: Board): string {
 }
 
 export const countLabel = (n: number) => `${n} lien${n > 1 ? 's' : ''}`;
+
+/** Page verrouillée : le contenu chiffré est dans la page, le navigateur du visiteur le déchiffre avec le mot de passe. */
+export function lockedPage(opts: { origin: string; sealed: string; kind: 'link' | 'page'; canonical?: string }): Response {
+  const payload = JSON.stringify({ kind: opts.kind, sealed: opts.sealed }).replace(/</g, '\\u003c');
+  return htmlPage({
+    title: 'Partage protégé', description: 'Ce partage leketia est protégé par un mot de passe.', origin: opts.origin, canonical: opts.canonical,
+    module: '/board-lock.mjs',
+    body: `<div id="locked"><h1>Partage protégé</h1><p class="meta">Son auteur l'a protégé par un mot de passe. Il est déchiffré ici, dans ton navigateur : ni leketia ni Google ne peuvent le lire.</p>
+<form class="lock" id="lockForm"><label for="pw">Mot de passe</label><input id="pw" type="password" autocomplete="off" required autofocus><p class="lock-err" id="lockErr" role="alert"></p><button class="btn primary" type="submit">Ouvrir</button></form></div>
+<div id="board" hidden></div><script type="application/json" id="lockData">${payload}</script>`,
+  });
+}
+
+/** Partage expiré (le serveur le sait quand la date est lisible). */
+export function expiredPage(origin: string): Response {
+  return htmlPage({ title: 'Partage expiré', description: 'Ce partage a expiré.', origin, status: 410,
+    body: `<h1>Ce partage a expiré</h1><p class="meta">Son auteur lui avait donné une date limite. Demande-lui un nouveau lien.</p><div class="actions"><a class="btn primary" href="/">Découvrir leketia</a></div>` });
+}

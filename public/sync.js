@@ -2,7 +2,7 @@
 // Le journal partagé est un fichier du dossier caché du Drive (leketia-sync.json), lisible seulement par leketia.
 // Chaque passage : lire la version du Drive (si elle a changé), fusionner lien par lien avec cet appareil,
 // appliquer ici, renvoyer si le Drive est en retard. Les images voyagent à part, une seule fois chacune.
-// Passages : à l'ouverture, au retour sur l'app, toutes les 2 minutes tant qu'elle est visible, et 2 s après une modification.
+// Passages : à l'ouverture, au retour sur l'app, toutes les 30 s quand on s'en sert (2 min sinon), et 2 s après une modification.
 const Sync = (() => {
   const FILE = 'leketia-sync.json';
   const MEDIA = 'leketia-media-';
@@ -140,15 +140,30 @@ const Sync = (() => {
     return running;
   }
 
+  // Rythme : immédiat à l'ouverture et au retour sur l'app ; toutes les 30 s quand on s'en sert,
+  // toutes les 2 minutes quand elle reste ouverte sans qu'on y touche (quota du Drive ménagé).
   let timer = null;
   let debounce = null;
+  let lastUse = Date.now();
+  let lastRun = 0;
+  const ACTIVE = 30000, IDLE = 120000, ACTIVE_WINDOW = 3 * 60000;
+  const tick = () => {
+    if (document.visibilityState !== 'visible') return;
+    const every = Date.now() - lastUse < ACTIVE_WINDOW ? ACTIVE : IDLE;
+    if (Date.now() - lastRun >= every) { lastRun = Date.now(); run(); }
+  };
+  const now = () => { lastRun = Date.now(); run(); };
   function start() {
-    run();
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') run(); });
-    window.addEventListener('online', run);
-    window.addEventListener('leketia:changed', () => { clearTimeout(debounce); debounce = setTimeout(run, 2000); });
+    now();
+    // Retour sur l'app : iOS signale la reprise par l'un ou l'autre de ces événements selon les versions.
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') now(); });
+    window.addEventListener('pageshow', (e) => { if (e.persisted) now(); });
+    window.addEventListener('focus', () => { if (Date.now() - lastRun > 5000) now(); });
+    window.addEventListener('online', now);
+    for (const ev of ['pointerdown', 'keydown', 'scroll', 'touchstart']) window.addEventListener(ev, () => { lastUse = Date.now(); }, { passive: true });
+    window.addEventListener('leketia:changed', () => { clearTimeout(debounce); debounce = setTimeout(now, 2000); });
     clearInterval(timer);
-    timer = setInterval(() => { if (document.visibilityState === 'visible') run(); }, 120000);
+    timer = setInterval(tick, 10000);
   }
 
   return { start, run, state: () => state };

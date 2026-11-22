@@ -5,7 +5,7 @@
 // Formats : page HTML déjà remplie (humains, agents IA, aperçus WhatsApp), ?format=md (texte), ?format=json (import).
 import { fromPage, toMarkdown, MAX_PAGE_BYTES } from '../../public/share-codec.mjs';
 import { guardedFetch, readCapped } from '../_shared';
-import { htmlPage, boardCards, countLabel, escHtml, PAGE_HEADERS, isIos, iosBridge } from '../_board-page';
+import { htmlPage, boardCards, countLabel, escHtml, PAGE_HEADERS, isIos, iosBridge, lockedPage, expiredPage } from '../_board-page';
 
 const FRESH_SECONDS = 120; // délai maximal avant qu'une mise à jour de l'auteur soit visible
 
@@ -25,7 +25,10 @@ async function readFromDrive(id: string, origin: string) {
   }
   let raw;
   try { raw = JSON.parse(await res.text()); } catch { throw new Gone(); } // fichier privé ou retiré : Google renvoie une page de connexion
-  try { return fromPage(raw); } catch { throw new Gone(); }
+  if (raw && raw.kind === 'leketia-page' && raw.v === 2 && typeof raw.enc === 'string') {
+    return { locked: true as const, sealed: raw.enc as string, expires: typeof raw.x === 'string' ? raw.x as string : '' };
+  }
+  try { return { locked: false as const, board: fromPage(raw) }; } catch { throw new Gone(); }
 }
 
 export async function onRequestGet(context: { request: Request; params: { id: string } }): Promise<Response> {
@@ -35,8 +38,18 @@ export async function onRequestGet(context: { request: Request; params: { id: st
     body: `<h1>Cette page n'est plus publiée</h1><p class="meta">Son auteur l'a peut-être retirée, ou le lien est incomplet.</p><div class="actions"><a class="btn primary" href="/">Découvrir leketia</a></div>` });
   if (!/^[A-Za-z0-9_-]{20,100}$/.test(id)) return gone();
 
-  let board;
-  try { board = await readFromDrive(id, url.origin); } catch { return gone(); }
+  let read;
+  try { read = await readFromDrive(id, url.origin); } catch { return gone(); }
+  const format0 = url.searchParams.get('format') || '';
+  const expires = read.locked ? read.expires : (read.board.expires || '');
+  if (expires && Date.parse(expires) <= Date.now()) {
+    return format0 ? new Response('Ce partage a expiré.\n', { status: 410, headers: { ...PAGE_HEADERS, 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } }) : expiredPage(url.origin);
+  }
+  if (read.locked) {
+    if (format0) return new Response('Cette page est protégée par un mot de passe : ouvre-la dans un navigateur.\n', { status: 403, headers: { ...PAGE_HEADERS, 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' } });
+    return lockedPage({ origin: url.origin, sealed: read.sealed, kind: 'page', canonical: `${url.origin}/p/${id}` });
+  }
+  const board = read.board;
 
   const format = url.searchParams.get('format') || (/text\/markdown/.test(context.request.headers.get('Accept') || '') ? 'md' : '');
   if (format === 'md') {
@@ -53,7 +66,7 @@ export async function onRequestGet(context: { request: Request; params: { id: st
     description: `${countLabel(n)} — page publiée avec leketia`,
     extraHead: `<link rel="alternate" type="text/markdown" href="/p/${id}?format=md">`,
     body: `<h1>${escHtml(board.name)}</h1>
-<p class="meta">${countLabel(n)}${board.date ? `, mis à jour le ${escHtml(board.date)}` : ''}. Page publiée par son auteur depuis son Google Drive.</p>
+<p class="meta">${countLabel(n)}${board.date ? `, mis à jour le ${escHtml(board.date)}` : ''}${board.expires ? `, visible jusqu'au ${escHtml(new Date(board.expires).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }))}` : ''}. Page publiée par son auteur depuis son Google Drive.</p>
 ${isIos(context.request.headers.get('User-Agent') || '') ? iosBridge(canonical) : ''}<div class="actions"><a class="btn primary" href="/?import_page=${id}">Ajouter à mon journal leketia</a><a class="btn ghost" href="/p/${id}?format=md">Version texte (Markdown)</a></div>
 ${boardCards(board)}`,
   });

@@ -1,7 +1,7 @@
 // Partage sans stockage : ce qui entre dans le lien en ressort à l'identique, et rien de dangereux n'en sort.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { encode, decode, toMarkdown, MAX_DECODED, toPage, fromPage, pageHash } from '../public/share-codec.mjs';
+import { encode, decode, toMarkdown, MAX_DECODED, toPage, fromPage, pageHash, isExpired, encodeLocked, decodeLocked, newKey, toLockedPage, openLockedPage } from '../public/share-codec.mjs';
 
 const board = {
   name: 'IA', date: '2026-11-22',
@@ -85,4 +85,33 @@ test('le lien et le QR ne transportent pas les miniatures', async () => {
   const img = 'data:image/jpeg;base64,' + Buffer.from('x'.repeat(3000)).toString('base64');
   const back = await decode(await encode({ name: 'x', links: [{ title: 't', url: 'https://example.com/', img }] }));
   assert.equal(back.links[0].img, undefined);
+});
+
+test('expiration : transportée par le lien et par la page, puis respectée', async () => {
+  const exp = { ...board, expires: '2026-11-23T10:00:00.000Z' };
+  const back = await decode(await encode(exp));
+  assert.equal(back.expires, exp.expires);
+  assert.equal(fromPage(JSON.parse(JSON.stringify(toPage(exp)))).expires, exp.expires);
+  assert.equal(isExpired(back, Date.parse('2026-11-23T09:59:00Z')), false);
+  assert.equal(isExpired(back, Date.parse('2026-11-23T10:00:01Z')), true);
+  assert.equal(isExpired(await decode(await encode(board))), false);
+});
+
+test('mot de passe : le bon mot de passe ouvre le lien, un autre est refusé', async () => {
+  const e = await encodeLocked({ ...board, expires: '2030-01-01T00:00:00.000Z' }, 'calebasse');
+  const back = await decodeLocked(e, 'calebasse');
+  assert.equal(back.links.length, 2);
+  assert.equal(back.expires, '2030-01-01T00:00:00.000Z');
+  await assert.rejects(decodeLocked(e, 'mauvais'), /Mot de passe incorrect/);
+  assert.ok(!e.includes('youtube'));
+});
+
+test('page publiée protégée : chiffrée, expiration lisible, ouverte avec le mot de passe', async () => {
+  const { key, salt } = await newKey('secret');
+  const page = JSON.parse(JSON.stringify(await toLockedPage({ ...board, expires: '2030-01-01T00:00:00.000Z' }, key, salt)));
+  assert.equal(page.v, 2);
+  assert.equal(page.x, '2030-01-01T00:00:00.000Z');
+  assert.ok(!JSON.stringify(page).includes('neural'));
+  assert.equal((await openLockedPage(page, 'secret')).links[0].title, board.links[0].title);
+  await assert.rejects(openLockedPage(page, 'non'), /Mot de passe incorrect/);
 });

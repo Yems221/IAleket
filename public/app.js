@@ -40,7 +40,9 @@ const App = (() => {
       refreshBackupHint();
       await whenShareCodec();
       handleImportLink();
+      cleanupExpired().catch(() => {});
       Sync.start(); // sans fenêtre : ne fait rien tant que la synchronisation n'est pas activée sur cet appareil
+      refreshSyncButton();
     } catch (e) {
       document.getElementById('grid').innerHTML = '';
       toast('Le stockage de ce navigateur est indisponible (navigation privée ?)', 'error');
@@ -286,6 +288,12 @@ const App = (() => {
     visible.forEach((item, idx) => {
       const card = mk('div', 'card');
       card.style.setProperty('--card-index', idx);
+      if (selecting) {
+        card.classList.toggle('is-selected', selected.has(item.id));
+        card.setAttribute('aria-pressed', selected.has(item.id) ? 'true' : 'false');
+        // Mode sélection : un toucher choisit le lien au lieu de l'ouvrir.
+        card.addEventListener('click', (e) => { e.stopImmediatePropagation(); e.preventDefault(); if (item.url) toggleSelected(item.id, card); }, true);
+      }
       card.setAttribute('tabindex', '0');
       card.setAttribute('role', 'article');
       const spaceName = spaces.find(s => s.id === item.space_id)?.name || '';
@@ -390,7 +398,7 @@ const App = (() => {
           });
         }
         // Appui long → panneau d'édition (mobile + souris)
-        attachLongPress(card, () => openEdit(item.id));
+        attachLongPress(card, () => { if (!selecting) openEdit(item.id); });
       }
 
       grid.appendChild(card);
@@ -676,9 +684,19 @@ const App = (() => {
   let shareRun = 0;
 
   async function boardFor(scope, { thumbs = false } = {}) {
-    const path = scope ? '/api/spaces/' + encodeURIComponent(scope) + '/items' : '/api/items';
-    const its = (await api(path)).items.filter(it => it.url);
-    const name = scope ? (spaces.find(s => s.id === scope) || {}).name : 'Mon journal';
+    let its, name;
+    if (scope === 'sel' || (scope && scope.startsWith('sel-'))) {
+      // Partage personnalisé : les liens choisis au clic (ou ceux d'une page publiée à partir d'une sélection).
+      const pub = scope === 'sel' ? null : (await Store.publications())[scope];
+      const ids = scope === 'sel' ? [...selected] : ((pub && pub.ids) || []);
+      const all = (await api('/api/items')).items;
+      its = ids.map(id => all.find(it => it.id === id)).filter(it => it && it.url);
+      name = scope === 'sel' ? (document.getElementById('shareName').value.trim() || 'Ma sélection') : ((pub && pub.name) || 'Ma sélection');
+    } else {
+      const path = scope ? '/api/spaces/' + encodeURIComponent(scope) + '/items' : '/api/items';
+      its = (await api(path)).items.filter(it => it.url);
+      name = scope ? (spaces.find(s => s.id === scope) || {}).name : 'Mon journal';
+    }
     const links = its.map(it => ({ title: it.title, url: it.url, note: it.description }));
     if (thumbs) { // page publiée : petites miniatures intégrées au fichier, dans la limite du budget
       let budget = THUMB_BUDGET;
@@ -715,20 +733,98 @@ const App = (() => {
     return out;
   }
   // Le plus grand début du board dont le lien tient dans la limite (recherche par dichotomie).
-  async function fitBoard(board, max) {
-    const url = async (n) => `${location.origin}/b?d=${await ShareCodec.encode({ ...board, links: board.links.slice(0, n) })}`;
+  async function fitBoard(board, max, lock = null) {
+    const url = async (n) => {
+      const d = await ShareCodec.encode({ ...board, links: board.links.slice(0, n) });
+      return lock ? `${location.origin}/b?e=${await ShareCodec.sealWithKey(lock.key, lock.salt, d)}` : `${location.origin}/b?d=${d}`;
+    };
     let full = await url(board.links.length);
     if (full.length <= max) return { url: full, count: board.links.length };
     let lo = 0, hi = board.links.length;
     while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if ((await url(mid)).length <= max) lo = mid; else hi = mid - 1; }
     return { url: await url(lo), count: lo };
   }
-  function showShare() {
+  // Options de protection : mot de passe (chiffrement dans le navigateur) et date limite.
+  function shareExpires() {
+    const v = document.getElementById('shareExp').value;
+    if (!v) return '';
+    if (v === 'custom') {
+      const d = document.getElementById('shareExpDate').value;
+      return d ? new Date(d + 'T23:59:59').toISOString() : '';
+    }
+    return new Date(Date.now() + Number(v) * 86400000).toISOString();
+  }
+  const sharePassword = () => document.getElementById('sharePw').value;
+  let lockCache = { pw: '', lock: null };
+  async function shareLock() { // une seule dérivation de clé par mot de passe (elle est volontairement lente)
+    const pw = sharePassword();
+    if (!pw) return null;
+    if (lockCache.pw !== pw) lockCache = { pw, lock: await ShareCodec.newKey(pw) };
+    return lockCache.lock;
+  }
+  let optionsTimer = null;
+  function shareOptionsChanged() {
+    document.getElementById('shareExpDate').hidden = document.getElementById('shareExp').value !== 'custom';
+    clearTimeout(optionsTimer);
+    optionsTimer = setTimeout(renderShare, 450);
+  }
+  function scopeChanged() {
+    const v = document.getElementById('shareScope').value;
+    if (v === '__pick') { closeShare(); startSelecting(); return; }
+    document.getElementById('shareNameGroup').hidden = v !== 'sel';
+    renderShare();
+  }
+
+  async function showShare(preset) {
     const sel = document.getElementById('shareScope');
-    sel.replaceChildren(new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id)));
-    if (activeSpace !== 'all' && activeSpace !== 'trash') sel.value = activeSpace;
+    const opts = [new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id))];
+    if (selected.size) opts.push(new Option(`Ma sélection (${selected.size} lien${selected.size > 1 ? 's' : ''})`, 'sel'));
+    const pubs = await Store.publications();
+    for (const [k, p] of Object.entries(pubs)) if (k.startsWith('sel-')) opts.push(new Option(`Page publiée « ${p.name || 'Ma sélection'} »`, k));
+    opts.push(new Option('Choisir les liens au clic…', '__pick'));
+    sel.replaceChildren(...opts);
+    if (preset) sel.value = preset;
+    else if (activeSpace !== 'all' && activeSpace !== 'trash') sel.value = activeSpace;
+    document.getElementById('shareNameGroup').hidden = sel.value !== 'sel';
     document.getElementById('shareModal').classList.add('active');
     setShareTab(shareTab);
+  }
+
+  // ===== Sélection au clic (partage personnalisé) =====
+  let selecting = false;
+  const selected = new Set();
+  function startSelecting() {
+    selecting = true;
+    document.body.classList.add('selecting');
+    document.getElementById('selectBar').hidden = false;
+    if (activeSpace === 'trash') setSpace('all'); else renderGrid();
+    updateSelectBar();
+    toast('Touche les liens à partager');
+  }
+  function stopSelecting(keep = false) {
+    selecting = false;
+    if (!keep) selected.clear();
+    document.body.classList.remove('selecting');
+    document.getElementById('selectBar').hidden = true;
+    renderGrid();
+  }
+  function toggleSelected(id, card) {
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    card.classList.toggle('is-selected', selected.has(id));
+    card.setAttribute('aria-pressed', selected.has(id) ? 'true' : 'false');
+    updateSelectBar();
+  }
+  function updateSelectBar() {
+    const n = selected.size;
+    document.getElementById('selectCount').textContent = n ? `${n} lien${n > 1 ? 's' : ''} choisi${n > 1 ? 's' : ''}` : 'Touche les liens à partager';
+    const go = document.getElementById('selectGo');
+    go.disabled = !n;
+    go.textContent = n ? `Partager (${n})` : 'Partager';
+  }
+  function shareSelection() {
+    if (!selected.size) return;
+    stopSelecting(true);
+    showShare('sel');
   }
   function closeShare() { document.getElementById('shareModal').classList.remove('active'); }
   function setShareTab(tab) {
@@ -742,7 +838,11 @@ const App = (() => {
     // Garder la hauteur pendant le calcul, et n'afficher le chargement que s'il dure : la fenêtre ne saute pas.
     if (pane.offsetHeight) pane.style.minHeight = pane.offsetHeight + 'px';
     const wait = setTimeout(() => { if (run === shareRun) pane.replaceChildren(mk('div', 'spinner')); }, 150);
-    const board = await boardFor(document.getElementById('shareScope').value || null);
+    const scopeValue = document.getElementById('shareScope').value || null;
+    const board = await boardFor(scopeValue);
+    const expires = shareExpires();
+    if (expires) board.expires = expires;
+    const lock = shareTab === 'qr' || shareTab === 'lien' ? await shareLock() : null;
     clearTimeout(wait);
     if (run !== shareRun) return; // un autre choix a été fait entre-temps
     pane.replaceChildren();
@@ -753,7 +853,7 @@ const App = (() => {
     const button = (label, cls, fn) => { const b = mk('button', 'btn ' + cls); b.type = 'button'; b.textContent = label; b.addEventListener('click', fn); pane.append(b); return b; };
 
     if (shareTab === 'qr') {
-      const { url, count } = await fitBoard(board, QR_MAX);
+      const { url, count } = await fitBoard(board, QR_MAX, lock);
       if (run !== shareRun) return;
       if (!count) { note('Le premier lien est trop long pour un QR code. Utilise l’onglet Lien.'); return; }
       const qr = qrcode(0, 'L');
@@ -765,15 +865,18 @@ const App = (() => {
       pane.append(box);
       note(count < total
         ? `${count} lien${count > 1 ? 's' : ''} sur ${total} tiennent dans le QR code. Pour tout partager, choisis une collection plus petite ou l’onglet Lien.`
-        : `${count} lien${count > 1 ? 's' : ''}. À scanner avec l’appareil photo : la personne ouvre le board et peut l’ajouter à son leketia.`);
+        : `${count} lien${count > 1 ? 's' : ''}. À scanner avec l’appareil photo : la personne ouvre le board et peut l’ajouter à son leketia.${lock ? ' Mot de passe demandé à l’ouverture.' : ''}`);
+      if (expires && !lock) note('Date limite inscrite dans le lien : la page la respecte, mais une personne très technique pourrait la retirer. Ajoute un mot de passe, ou utilise Publier, pour une limite garantie.');
     } else if (shareTab === 'lien') {
-      const { url, count } = await fitBoard(board, LINK_MAX);
+      const { url, count } = await fitBoard(board, LINK_MAX, lock);
       if (run !== shareRun) return;
-      note(count < total ? `${count} liens sur ${total} tiennent dans un lien. Pour le reste, partage collection par collection.` : `${count} lien${count > 1 ? 's' : ''} dans le lien. Lisible par une personne et par un agent IA, sans compte.`);
+      note(count < total ? `${count} liens sur ${total} tiennent dans un lien. Pour le reste, partage collection par collection.`
+        : lock ? `${count} lien${count > 1 ? 's' : ''}, chiffré${count > 1 ? 's' : ''} : il faudra le mot de passe pour l'ouvrir. Envoie le mot de passe par un autre moyen que le lien.`
+        : `${count} lien${count > 1 ? 's' : ''} dans le lien. Lisible par une personne et par un agent IA, sans compte.`);
       if (navigator.share) button('Envoyer le lien', 'btn-primary', async () => { try { await navigator.share({ title: board.name, url }); } catch { /* annulé */ } });
       button('Copier le lien', navigator.share ? 'btn-ghost' : 'btn-primary', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
     } else if (shareTab === 'publier') {
-      await renderPublish(pane, board, document.getElementById('shareScope').value || 'all', run);
+      await renderPublish(pane, board, scopeValue || 'all', run);
     } else {
       const md = ShareCodec.toMarkdown(board);
       const pre = mk('pre', 'share-md'); pre.textContent = md.length > 1200 ? md.slice(0, 1200) + '…' : md; pane.append(pre);
@@ -795,19 +898,27 @@ const App = (() => {
     if (run !== shareRun) return;
 
     if (!pub) {
-      note(`Crée une page publique pour « ${board.name} ». Le fichier est rangé dans ton Google Drive : toute personne qui a le lien peut la lire, et elle se met à jour quand tu modifies la collection.`);
+      const pw = sharePassword(), exp = shareExpires();
+      const prot = [pw && 'protégée par mot de passe', exp && `visible jusqu'au ${new Date(exp).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`].filter(Boolean).join(', ');
+      note(`Crée une page publique pour « ${board.name} »${prot ? ` (${prot})` : ''}. Le fichier est rangé dans ton Google Drive : toute personne qui a le lien peut l'ouvrir, et elle se met à jour quand tu modifies ${scope === 'sel' ? 'ces liens' : 'la collection'}.`);
       button('Publier la page', 'btn-primary', async () => {
-        try { await publishScope(scope); toast('Page publiée'); renderShare(); }
+        try {
+          const key = await publishScope(scope, { password: pw, expires: exp, name: board.name });
+          toast('Page publiée');
+          if (scope === 'sel') { selected.clear(); await showShare(key); } else renderShare();
+        }
         catch (e) { toast(e.message, 'error'); }
       });
       return;
     }
 
     const url = pageUrl(pub.fileId);
+    if (pub.expires && Date.parse(pub.expires) <= Date.now()) { note('Cette page a expiré : elle n’est plus visible.'); }
     const link = mk('a', 'share-url'); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = url.replace(/^https?:\/\//, ''); pane.append(link);
     const upToDate = pub.hash === await ShareCodec.pageHash(await boardFor(scope === 'all' ? null : scope, { thumbs: true }));
     if (run !== shareRun) return;
-    note(upToDate ? 'Page publiée et à jour. Lisible par une personne, un agent IA, et avec un aperçu dans WhatsApp.' : 'Tu as modifié la collection depuis la dernière publication.');
+    const prot = [pub.keyRaw && 'protégée par mot de passe', pub.expires && `visible jusqu'au ${new Date(pub.expires).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`].filter(Boolean).join(', ');
+    note((upToDate ? (pub.keyRaw ? 'Page publiée et à jour.' : 'Page publiée et à jour. Lisible par une personne, un agent IA, et avec un aperçu dans WhatsApp.') : 'Tu as modifié ces liens depuis la dernière publication.') + (prot ? ` Elle est ${prot}.` : ''));
     if (!upToDate) button('Mettre à jour la page', 'btn-primary', async () => {
       try { await updateScope(scope, true); toast('Page mise à jour'); renderShare(); } catch (e) { toast(e.message, 'error'); }
     });
@@ -819,11 +930,35 @@ const App = (() => {
     });
   }
 
-  async function publishScope(scope) {
+  // Publie ; renvoie la clé de la publication (« sel-… » pour une sélection, qui garde la liste de ses liens).
+  async function publishScope(scope, { password = '', expires = '', name = '' } = {}) {
     const board = await boardFor(scope === 'all' ? null : scope, { thumbs: true });
-    const fileId = await Drive.publish(ShareCodec.toPage(board), board.name);
+    if (expires) board.expires = expires;
+    let key = scope, extra = {};
+    if (scope === 'sel') { key = 'sel-' + crypto.randomUUID().slice(0, 8); extra = { ids: [...selected], name: name || board.name }; }
+    let page = ShareCodec.toPage(board);
+    if (password) {
+      const k = await ShareCodec.newKey(password);
+      page = await ShareCodec.toLockedPage(board, k.key, k.salt);
+      extra.keyRaw = k.raw; extra.salt = k.saltB64; // la clé (pas le mot de passe) reste sur l'appareil pour les mises à jour
+    }
+    const fileId = await Drive.publish(page, board.name);
     const all = await Store.publications();
-    all[scope] = { fileId, hash: await ShareCodec.pageHash(board), publishedAt: Date.now(), updatedAt: Date.now() };
+    all[key] = { fileId, hash: await ShareCodec.pageHash(board), publishedAt: Date.now(), updatedAt: Date.now(), ...(expires ? { expires } : {}), ...extra };
+    await Store.savePublications(all);
+    return key;
+  }
+  async function pageFor(pub, board) {
+    if (pub.expires) board.expires = pub.expires;
+    if (!pub.keyRaw) return ShareCodec.toPage(board);
+    return ShareCodec.toLockedPage(board, await ShareCodec.importKey(pub.keyRaw), ShareCodec.saltFrom(pub.salt));
+  }
+  // Pages expirées : le fichier est retiré du Drive dès que l'app peut le faire sans fenêtre.
+  async function cleanupExpired() {
+    const all = await Store.publications();
+    const dead = Object.entries(all).filter(([, p]) => p.expires && Date.parse(p.expires) <= Date.now());
+    if (!dead.length || !(await Drive.canPublishSilently())) return;
+    for (const [k, p] of dead) { try { await Drive.unpublish(p.fileId); delete all[k]; } catch { /* au prochain passage */ } }
     await Store.savePublications(all);
   }
 
@@ -832,12 +967,13 @@ const App = (() => {
     const all = await Store.publications();
     const pub = all[scope];
     if (!pub) return;
-    if (scope !== 'all' && !spaces.some(s => s.id === scope)) return; // collection supprimée : la page reste, à retirer à la main
+    if (scope !== 'all' && !scope.startsWith('sel-') && !spaces.some(s => s.id === scope)) return; // collection supprimée : la page reste, à retirer à la main
+    if (pub.expires && Date.parse(pub.expires) <= Date.now()) return;
     const board = await boardFor(scope === 'all' ? null : scope, { thumbs: true });
     const hash = await ShareCodec.pageHash(board);
     if (hash === pub.hash) return;
     if (!interactive && !(await Drive.canPublishSilently())) return; // mise à jour au prochain passage dans Partager › Publier
-    try { await Drive.update(pub.fileId, ShareCodec.toPage(board)); }
+    try { await Drive.update(pub.fileId, await pageFor(pub, board)); }
     catch (e) {
       if (e.status === 404) { delete all[scope]; await Store.savePublications(all); throw new Error('Le fichier de la page a été supprimé du Drive : la page n’est plus publiée'); }
       throw e;
@@ -947,7 +1083,8 @@ const App = (() => {
 
   async function handleImportLink() {
     const params = new URLSearchParams(location.search);
-    const d = params.get('import');
+    const hashImport = location.hash.startsWith('#import=') ? location.hash.slice(8) : '';
+    const d = params.get('import') || hashImport;
     const pageId = params.get('import_page');
     if (!d && !pageId) return;
     const ref = pageId ? { pageId, url: `${location.origin}/p/${pageId}` } : { d, url: `${location.origin}/b?d=${d}` };
@@ -990,6 +1127,51 @@ const App = (() => {
     return linked;
   }
   window.addEventListener('leketia:sync-state', () => { if (document.getElementById('backupModal').classList.contains('active')) refreshSyncZone(); });
+  // Plusieurs onglets ou fenêtres de leketia sur le même appareil partagent la même base :
+  // quand l'un modifie ou se synchronise, les autres réaffichent tout de suite.
+  const tabs = 'BroadcastChannel' in window ? new BroadcastChannel('leketia') : null;
+  let fromOtherTab = false;
+  if (tabs) {
+    tabs.onmessage = async () => { fromOtherTab = true; try { await loadSpaces(); } finally { fromOtherTab = false; } };
+    window.addEventListener('leketia:changed', () => { if (!fromOtherTab) tabs.postMessage('changed'); });
+    window.addEventListener('leketia:synced', () => tabs.postMessage('synced'));
+  }
+
+  // Bouton de synchro dans la barre du haut : visible quand la synchro est active, tourne pendant un passage.
+  async function refreshSyncButton() {
+    const b = document.getElementById('syncBtn');
+    if (!b) return;
+    const linked = await Drive.syncLinked().catch(() => false);
+    b.hidden = !linked;
+    const st = Sync.state();
+    b.classList.toggle('is-syncing', st.status === 'syncing');
+    b.classList.toggle('is-error', st.status === 'error');
+    b.title = st.status === 'error' ? `Synchronisation en échec : ${st.error}` : st.at ? `Synchronisé à ${new Date(st.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} — toucher pour synchroniser` : 'Synchroniser';
+  }
+  window.addEventListener('leketia:sync-state', refreshSyncButton);
+  async function syncTap() { await Sync.run(); refreshSyncButton(); }
+
+  // Tirer vers le bas en haut de la liste : synchroniser (geste habituel sur téléphone).
+  (() => {
+    let y0 = null, pulled = 0;
+    const hint = () => document.getElementById('pullHint');
+    window.addEventListener('touchstart', (e) => { y0 = window.scrollY <= 0 && !document.querySelector('.modal-overlay.active') ? e.touches[0].clientY : null; pulled = 0; }, { passive: true });
+    window.addEventListener('touchmove', (e) => {
+      if (y0 == null) return;
+      pulled = Math.max(0, e.touches[0].clientY - y0);
+      const h = hint();
+      if (h) { h.hidden = pulled < 20; h.style.transform = `translateY(${Math.min(pulled, 90) * 0.5}px)`; h.textContent = pulled > 80 ? 'Relâche pour synchroniser' : 'Tire pour synchroniser'; }
+    }, { passive: true });
+    window.addEventListener('touchend', async () => {
+      const h = hint();
+      if (h) { h.hidden = true; h.style.transform = ''; }
+      if (y0 != null && pulled > 80) {
+        if (await Drive.syncLinked().catch(() => false)) { toast('Synchronisation…'); await Sync.run(); } else await loadSpaces();
+      }
+      y0 = null; pulled = 0;
+    });
+  })();
+
   // Un autre appareil a ajouté ou modifié : on réaffiche, sans changer de collection.
   window.addEventListener('leketia:synced', async (e) => {
     await loadSpaces();
@@ -1006,6 +1188,7 @@ const App = (() => {
       const r = await Sync.run();
       if (r && r.error) throw new Error(Sync.state().error);
       toast('Synchronisation activée sur cet appareil');
+      refreshSyncButton();
     } catch (e) { toast(e.message, 'error'); }
     finally { if (btn) btn.disabled = false; refreshSyncZone(); }
   }
@@ -1018,6 +1201,7 @@ const App = (() => {
   async function syncDisconnect() {
     if (!(await showConfirm('Arrêter la synchronisation sur cet appareil ? Ton journal reste ici et dans ton Google Drive ; les autres appareils continuent.', 'Arrêter'))) return;
     await Drive.disconnect();
+    refreshSyncButton();
     toast('Synchronisation arrêtée sur cet appareil');
     refreshSyncZone();
   }
@@ -1451,7 +1635,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, syncTap, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, scopeChanged, shareOptionsChanged, stopSelecting, shareSelection, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

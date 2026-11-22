@@ -711,6 +711,8 @@ const App = (() => {
       note(count < total ? `${count} liens sur ${total} tiennent dans un lien. Pour le reste, partage collection par collection.` : `${count} lien${count > 1 ? 's' : ''} dans le lien. Lisible par une personne et par un agent IA, sans compte.`);
       if (navigator.share) button('Envoyer le lien', 'btn-primary', async () => { try { await navigator.share({ title: board.name, url }); } catch { /* annulé */ } });
       button('Copier le lien', navigator.share ? 'btn-ghost' : 'btn-primary', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
+    } else if (shareTab === 'publier') {
+      await renderPublish(pane, board, document.getElementById('shareScope').value || 'all', run);
     } else {
       const md = ShareCodec.toMarkdown(board);
       const pre = mk('pre', 'share-md'); pre.textContent = md.length > 1200 ? md.slice(0, 1200) + '…' : md; pane.append(pre);
@@ -719,13 +721,101 @@ const App = (() => {
     }
   }
 
+  // ===== Publier : une page publique servie depuis le Google Drive de son auteur =====
+  // Le fichier vit dans le Drive de la personne ; /p/<id> l'affiche. Modifier la collection met la page à jour,
+  // la retirer supprime le fichier. Rien n'est stocké sur le serveur de leketia.
+  const pageUrl = (id) => `${location.origin}/p/${id}`;
+
+  async function renderPublish(pane, board, scope, run) {
+    const note = (t) => { const p = mk('p', 'hint share-note'); p.textContent = t; pane.append(p); return p; };
+    const button = (label, cls, fn) => { const b = mk('button', 'btn ' + cls); b.type = 'button'; b.textContent = label; b.addEventListener('click', async () => { b.disabled = true; try { await fn(); } finally { b.disabled = false; } }); pane.append(b); return b; };
+    if (!(await Drive.available())) { note('La publication passe par Google Drive, qui n’est pas configuré sur cette instance.'); return; }
+    const pub = (await Store.publications())[scope];
+    if (run !== shareRun) return;
+
+    if (!pub) {
+      note(`Crée une page publique pour « ${board.name} ». Le fichier est rangé dans ton Google Drive : toute personne qui a le lien peut la lire, et elle se met à jour quand tu modifies la collection.`);
+      button('Publier la page', 'btn-primary', async () => {
+        try { await publishScope(scope); toast('Page publiée'); renderShare(); }
+        catch (e) { toast(e.message, 'error'); }
+      });
+      return;
+    }
+
+    const url = pageUrl(pub.fileId);
+    const link = mk('a', 'share-url'); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = url.replace(/^https?:\/\//, ''); pane.append(link);
+    const upToDate = pub.hash === await ShareCodec.pageHash(board);
+    if (run !== shareRun) return;
+    note(upToDate ? 'Page publiée et à jour. Lisible par une personne, un agent IA, et avec un aperçu dans WhatsApp.' : 'Tu as modifié la collection depuis la dernière publication.');
+    if (!upToDate) button('Mettre à jour la page', 'btn-primary', async () => {
+      try { await updateScope(scope, true); toast('Page mise à jour'); renderShare(); } catch (e) { toast(e.message, 'error'); }
+    });
+    if (navigator.share) button('Envoyer le lien', upToDate ? 'btn-primary' : 'btn-ghost', async () => { try { await navigator.share({ title: board.name, url }); } catch { /* annulé */ } });
+    button('Copier le lien', 'btn-ghost', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
+    button('Retirer la page', 'btn-ghost share-danger', async () => {
+      if (!(await showConfirm('Retirer cette page ? Le lien ne marchera plus et le fichier sera supprimé de ton Google Drive.', 'Retirer'))) return;
+      try { await unpublishScope(scope); toast('Page retirée'); renderShare(); } catch (e) { toast(e.message, 'error'); }
+    });
+  }
+
+  async function publishScope(scope) {
+    const board = await boardFor(scope === 'all' ? null : scope);
+    const fileId = await Drive.publish(ShareCodec.toPage(board), board.name);
+    const all = await Store.publications();
+    all[scope] = { fileId, hash: await ShareCodec.pageHash(board), publishedAt: Date.now(), updatedAt: Date.now() };
+    await Store.savePublications(all);
+  }
+
+  // Réécrit le fichier si le contenu a changé. Sans geste de la personne, seulement si Google a déjà donné l'accès.
+  async function updateScope(scope, interactive) {
+    const all = await Store.publications();
+    const pub = all[scope];
+    if (!pub) return;
+    if (scope !== 'all' && !spaces.some(s => s.id === scope)) return; // collection supprimée : la page reste, à retirer à la main
+    const board = await boardFor(scope === 'all' ? null : scope);
+    const hash = await ShareCodec.pageHash(board);
+    if (hash === pub.hash) return;
+    if (!interactive && !Drive.canPublishSilently()) return; // mise à jour au prochain passage dans Partager › Publier
+    try { await Drive.update(pub.fileId, ShareCodec.toPage(board)); }
+    catch (e) {
+      if (e.status === 404) { delete all[scope]; await Store.savePublications(all); throw new Error('Le fichier de la page a été supprimé du Drive : la page n’est plus publiée'); }
+      throw e;
+    }
+    all[scope] = { ...pub, hash, updatedAt: Date.now() };
+    await Store.savePublications(all);
+  }
+
+  async function unpublishScope(scope) {
+    const all = await Store.publications();
+    if (all[scope]) await Drive.unpublish(all[scope].fileId);
+    delete all[scope];
+    await Store.savePublications(all);
+  }
+
+  let publishTimer = null;
+  window.addEventListener('leketia:changed', () => {
+    clearTimeout(publishTimer);
+    publishTimer = setTimeout(async () => {
+      const all = await Store.publications();
+      for (const scope of Object.keys(all)) { try { await updateScope(scope, false); } catch { /* réessayé à la prochaine modification */ } }
+    }, 3000);
+  });
+
   // Board reçu par un QR ou un lien (/?import=…) : on montre ce qu'il contient, la personne décide.
   async function handleImportLink() {
-    const d = new URLSearchParams(location.search).get('import');
-    if (!d) return;
+    const params = new URLSearchParams(location.search);
+    const d = params.get('import');
+    const pageId = params.get('import_page');
+    if (!d && !pageId) return;
     history.replaceState({}, '', '/');
     try {
-      const board = await ShareCodec.decode(d);
+      let board;
+      if (pageId) {
+        if (!/^[A-Za-z0-9_-]{20,100}$/.test(pageId)) throw new Error('Lien de page invalide');
+        const res = await fetch(`/p/${pageId}?format=json`);
+        if (!res.ok) throw new Error('Cette page n’est plus publiée');
+        board = await res.json();
+      } else board = await ShareCodec.decode(d);
       const ok = await showConfirm(`Ajouter « ${board.name} » (${board.links.length} lien${board.links.length > 1 ? 's' : ''}) à ton journal ?`, 'Ajouter');
       if (!ok) return;
       const { added, skipped, collection } = await Store.importShared(board);

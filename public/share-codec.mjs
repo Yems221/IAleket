@@ -75,6 +75,30 @@ export async function decode(param) {
   return clean({ name: raw.n, date: raw.d, links: raw.l.map((x) => ({ title: x && x[0], url: x && x[1], note: x && x[2] })) });
 }
 
+// ---- Page publiée : un fichier JSON public dans le Drive de son auteur ------------------
+// Le Drive sert de « disque dur public » ; la page /p/<id> le lit et l'affiche, sans rien garder.
+export const PAGE_KIND = 'leketia-page';
+export const MAX_PAGE_BYTES = 1024 * 1024;
+
+/** Contenu du fichier publié dans le Drive. */
+export function toPage(board) {
+  const b = clean(board);
+  return { kind: PAGE_KIND, v: 1, n: b.name, d: b.date, l: b.links.map((l) => (l.note ? [l.title, l.url, l.note] : [l.title, l.url])) };
+}
+
+/** Lit un fichier publié ; refuse tout ce qui n'est pas une page leketia. */
+export function fromPage(raw) {
+  if (!raw || raw.kind !== PAGE_KIND || raw.v !== 1 || !Array.isArray(raw.l)) throw new Error('Ce n’est pas une page leketia');
+  return clean({ name: raw.n, date: raw.d, links: raw.l.map((x) => ({ title: x && x[0], url: x && x[1], note: x && x[2] })) });
+}
+
+/** Empreinte du contenu (sans la date) : sert à savoir si la page publiée est à jour. */
+export async function pageHash(board) {
+  const { n, l } = toPage(board);
+  const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(JSON.stringify([n, l])));
+  return toBase64Url(new Uint8Array(digest)).slice(0, 22);
+}
+
 /** Texte Markdown, le format que les agents IA lisent le mieux. */
 export function toMarkdown(board, { source } = {}) {
   const b = clean(board);

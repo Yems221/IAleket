@@ -4,7 +4,7 @@
 //    les mises à jour arrivent tout de suite. Icônes : cache d'abord.
 importScripts('/idb.js');
 
-const CACHE_NAME = 'leketia-v11';
+const CACHE_NAME = 'leketia-v12';
 const STATIC_ASSETS = [
   '/',
   '/app.css',
@@ -49,7 +49,7 @@ self.addEventListener('fetch', (event) => {
   }
   if (event.request.method !== 'GET') return;
   if (url.pathname.startsWith('/api/')) return; // aperçus : toujours le réseau, jamais de cache
-  if (url.pathname === '/b') return; // board partagé : page du serveur, jamais mise en cache à la place de l'app
+  if (url.pathname === '/b' || url.pathname.startsWith('/p/')) return; // board partagé ou page publiée : page du serveur, jamais mise en cache à la place de l'app
 
   if (
     event.request.mode === 'navigate' ||

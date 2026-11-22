@@ -357,5 +357,18 @@ const Store = (() => {
 
   const lastBackupAt = () => idbRun('meta', 'readonly', (s) => s.get('lastBackupAt'));
 
-  return { api, saveMedia, urlForMedia, kindOf, housekeeping, exportFile, importFile, importShared, lastBackupAt, safeLink };
+  // Prévenir l'app quand le journal change (ex. pour mettre à jour une page publiée).
+  const changed = () => window.dispatchEvent(new Event('leketia:changed'));
+  const notifying = (fn) => async (...args) => { const out = await fn(...args); changed(); return out; };
+  async function apiNotifying(path, opts = {}) {
+    const out = await api(path, opts);
+    if (opts.method && opts.method !== 'GET' && path !== '/api/fetch-link') changed();
+    return out;
+  }
+
+  // Pages publiées : quelle collection, quel fichier Drive, quel contenu a été envoyé.
+  const publications = async () => (await idbRun('meta', 'readonly', (s) => s.get('publications'))) || {};
+  const savePublications = (all) => idbRun('meta', 'readwrite', (s) => s.put(all, 'publications'));
+
+  return { api: apiNotifying, saveMedia, urlForMedia, kindOf, housekeeping, exportFile, importFile: notifying(importFile), importShared: notifying(importShared), lastBackupAt, safeLink, publications, savePublications };
 })();

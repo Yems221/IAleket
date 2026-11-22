@@ -5,11 +5,13 @@
 // Le jeton reste en mémoire : il n'est jamais écrit sur l'appareil.
 const Drive = (() => {
   const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+  // Publier une page : accès aux seuls fichiers créés par leketia (drive.file, non sensible), demandé au premier « Publier ».
+  const SCOPE_PUBLISH = 'https://www.googleapis.com/auth/drive.file';
   const KEEP = 10; // sauvegardes gardées ; chacune contient tout le journal, la plus récente suffit pour tout restaurer
   let clientId = null;   // identifiant Google de cette instance (public, pas un secret)
   let gisReady = null;   // chargement de la bibliothèque Google, une seule fois
   let tokenClient = null;
-  let token = null;      // { value, expiresAt }
+  let token = null;      // { value, expiresAt, scope }
 
   // L'identifiant est propre à chaque instance : il vient de sa configuration serveur.
   async function available() {
@@ -37,8 +39,9 @@ const Drive = (() => {
   }
 
   // Demande un jeton à Google : une fenêtre s'ouvre au premier usage, puis plus rien tant qu'il est valide.
-  async function getToken() {
-    if (token && Date.now() < token.expiresAt - 60000) return token.value;
+  const hasScope = (scope) => !!token && Date.now() < token.expiresAt - 60000 && token.scope.split(' ').includes(scope);
+  async function getToken(scope = SCOPE) {
+    if (hasScope(scope)) return token.value;
     await loadGis();
     return new Promise((resolve, reject) => {
       if (!tokenClient) {
@@ -46,21 +49,23 @@ const Drive = (() => {
       }
       tokenClient.callback = (resp) => {
         if (resp.error) { reject(new Error('Accès à Google Drive refusé')); return; }
-        token = { value: resp.access_token, expiresAt: Date.now() + (Number(resp.expires_in) || 3600) * 1000 };
+        if (!String(resp.scope || '').split(' ').includes(scope)) { reject(new Error('Accès à Google Drive refusé')); return; }
+        token = { value: resp.access_token, expiresAt: Date.now() + (Number(resp.expires_in) || 3600) * 1000, scope: String(resp.scope || '') };
         resolve(token.value);
       };
       tokenClient.error_callback = (err) => {
         reject(new Error(err && err.type === 'popup_closed' ? 'Fenêtre Google fermée : rien n’a été envoyé' : 'Connexion à Google impossible'));
       };
-      tokenClient.requestAccessToken({ prompt: '' });
+      tokenClient.requestAccessToken({ prompt: '', scope, include_granted_scopes: true });
     });
   }
 
   async function api(url, accessToken, options = {}) {
     const res = await fetch(url, { ...options, headers: { Authorization: `Bearer ${accessToken}`, ...(options.headers || {}) } });
     if (res.status === 401) { token = null; throw new Error('Session Google expirée : réessaie'); }
+    if (res.status === 404) throw Object.assign(new Error('Fichier introuvable dans Google Drive'), { status: 404 });
     if (!res.ok) throw new Error(`Google Drive a refusé l’envoi (${res.status})`);
-    return res.json();
+    return res.status === 204 ? null : res.json();
   }
 
   // Envoie une sauvegarde complète dans le dossier caché, puis ne garde que les KEEP plus récentes.
@@ -101,5 +106,46 @@ const Drive = (() => {
     return new File([await res.blob()], name || 'leketia.html', { type: 'text/html' });
   }
 
-  return { available, save, list, download };
+  // ---- Pages publiées : un fichier JSON public, visible dans le Drive de l'auteur -------------
+  // Toute personne qui a le lien peut le lire ; leketia.pages.dev/p/<id> l'affiche.
+
+  async function publish(page, name) {
+    if (!(await available())) throw new Error('Google Drive n’est pas configuré sur cette instance');
+    const accessToken = await getToken(SCOPE_PUBLISH);
+    const body = new FormData();
+    body.append('metadata', new Blob([JSON.stringify({
+      name: `leketia – ${name}.json`, mimeType: 'application/json',
+      description: 'Page publique leketia : toute personne qui a le lien peut la lire. La supprimer retire la page.',
+    })], { type: 'application/json' }));
+    body.append('file', new Blob([JSON.stringify(page)], { type: 'application/json' }));
+    const sent = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', accessToken, { method: 'POST', body });
+    try {
+      await api(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sent.id)}/permissions`, accessToken, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+      });
+    } catch (e) {
+      await unpublish(sent.id).catch(() => {});
+      throw new Error('Google Drive refuse de rendre ce fichier public (compte professionnel ou scolaire ?)');
+    }
+    return sent.id;
+  }
+
+  // Réécrit le contenu du fichier publié : même identifiant, donc même adresse publique.
+  async function update(id, page) {
+    const accessToken = await getToken(SCOPE_PUBLISH);
+    await api(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(id)}?uploadType=media&fields=id`, accessToken, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(page),
+    });
+  }
+
+  // Retire la page : le fichier est supprimé du Drive.
+  async function unpublish(id) {
+    const accessToken = await getToken(SCOPE_PUBLISH);
+    try { await api(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}`, accessToken, { method: 'DELETE' }); }
+    catch (e) { if (e.status !== 404) throw e; } // déjà supprimé à la main : c'est retiré
+  }
+
+  const canPublishSilently = () => hasScope(SCOPE_PUBLISH);
+
+  return { available, save, list, download, publish, update, unpublish, canPublishSilently };
 })();

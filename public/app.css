@@ -912,3 +912,6 @@ body { background: var(--surface); }
 .share-md { margin: 0; max-height: 180px; overflow: auto; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--r);
   font: 12px/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-word; }
 .share-pane .btn { width: 100%; min-height: 44px; }
+
+.share-url { justify-self: center; max-width: 100%; padding: 10px 14px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--border-light); font-weight: 600; color: var(--accent, #1F4BC9); text-decoration: none; overflow-wrap: anywhere; text-align: center; }
+.share-danger { color: var(--danger, #b42318); }

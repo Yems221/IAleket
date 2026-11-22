@@ -1,7 +1,7 @@
 // Partage sans stockage : ce qui entre dans le lien en ressort à l'identique, et rien de dangereux n'en sort.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { encode, decode, toMarkdown, MAX_DECODED } from '../public/share-codec.mjs';
+import { encode, decode, toMarkdown, MAX_DECODED, toPage, fromPage, pageHash } from '../public/share-codec.mjs';
 
 const board = {
   name: 'IA', date: '2026-11-22',
@@ -51,4 +51,20 @@ test('Markdown lisible par un agent', () => {
   assert.match(md, /^# IA\n/);
   assert.match(md, /- \[But what is a neural network\?\]\(https:\/\/www\.youtube\.com\/watch\?v=aircAruvnKk\)/);
   assert.match(md, /à revoir #deeplearning/);
+});
+
+test('page publiée : aller-retour et refus des fichiers étrangers', async () => {
+  const page = JSON.parse(JSON.stringify(toPage(board)));
+  assert.equal(page.kind, 'leketia-page');
+  assert.deepEqual(fromPage(page).links, (await decode(await encode(board))).links);
+  assert.throws(() => fromPage({ hello: 'world' }), /pas une page leketia/);
+  assert.throws(() => fromPage(null), /pas une page leketia/);
+  const piege = fromPage({ kind: 'leketia-page', v: 1, n: 'x', l: [['piège', 'javascript:alert(1)'], ['ok', 'https://example.com/']] });
+  assert.deepEqual(piege.links.map((l) => l.url), ['https://example.com/']);
+});
+
+test('empreinte : change avec le contenu, pas avec la date', async () => {
+  const h = await pageHash(board);
+  assert.equal(h, await pageHash({ ...board, date: '2030-01-01' }));
+  assert.notEqual(h, await pageHash({ ...board, links: board.links.slice(1) }));
 });

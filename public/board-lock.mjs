@@ -2,6 +2,7 @@
 // Le serveur ne voit que du chiffré ; ici on déchiffre, on vérifie l'expiration et on affiche le board.
 import { decodeLocked, openLockedPage, encode, toMarkdown, isExpired } from '/share-codec.mjs';
 
+window.__lockReady = true; // le module s'est bien chargé (voir la garde dans la page)
 const data = JSON.parse(document.getElementById('lockData').textContent);
 const form = document.getElementById('lockForm');
 const err = document.getElementById('lockErr');

@@ -42,7 +42,10 @@ const domain = (raw: string) => { try { return new URL(raw).hostname.replace(/^w
 export function htmlPage(opts: { title: string; description: string; origin: string; canonical?: string; body: string; status?: number; extraHead?: string; cache?: string; module?: string }): Response {
   const { title, description, origin, canonical, body, status = 200, extraHead = '', cache = 'no-store', module = '' } = opts;
   const nonce = crypto.randomUUID().replace(/-/g, '');
-  const moduleTag = module ? `<script type="module" nonce="${nonce}" src="${module}"></script>` : '';
+  // Garde : si un ancien service worker sert une version périmée du module de partage, le module ne se charge pas.
+  // On vide alors les caches et on recharge, une seule fois.
+  const guard = `<script nonce="${nonce}">setTimeout(async function(){if(window.__lockReady||sessionStorage.getItem('leketia:healed'))return;sessionStorage.setItem('leketia:healed','1');try{for(const k of await caches.keys())await caches.delete(k);const r=await navigator.serviceWorker.getRegistration();if(r)await r.update();}catch(e){}location.reload();},2500);</script>`;
+  const moduleTag = module ? `<script type="module" nonce="${nonce}" src="${module}"></script>${guard}` : '';
   const script = moduleTag + (body.includes('id="copyLink"') ? `<script nonce="${nonce}">document.getElementById('copyLink').addEventListener('click',async function(){try{await navigator.clipboard.writeText(this.dataset.url);this.textContent='Lien copié : ouvre leketia';}catch(e){this.textContent='Copie impossible : copie l’adresse de la page';}});</script>` : '');
   const t = escHtml(title);
   const d = escHtml(description);

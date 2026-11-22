@@ -791,20 +791,37 @@ const App = (() => {
   let shareTab = 'qr';
   let shareRun = 0;
 
+  // Une page publiée a une source : une collection (src, '' pour tout le journal) ou des liens choisis (ids).
+  // Clés : « pg-… » (pages actuelles, plusieurs par source possibles) ; anciennes : « all », id de collection, « sel-… ».
+  const isPageKey = (v) => !!v && (v.startsWith('sel-') || v.startsWith('pg-'));
+  const pubSource = (key, pub) => (pub && pub.ids ? { ids: pub.ids } : { src: pub && pub.src !== undefined ? pub.src : (key === 'all' ? '' : key) });
+
   async function boardFor(scope, { thumbs = false } = {}) {
+    if (isPageKey(scope)) {
+      const pub = (await Store.publications())[scope];
+      return pub ? pubBoard(scope, pub, { thumbs }) : boardOf([], 'Ma sélection', false);
+    }
     let its, name;
-    if (scope === 'sel' || (scope && scope.startsWith('sel-'))) {
-      // Partage personnalisé : les liens choisis au clic (ou ceux d'une page publiée à partir d'une sélection).
-      const pub = scope === 'sel' ? null : (await Store.publications())[scope];
-      const ids = scope === 'sel' ? [...selected] : ((pub && pub.ids) || []);
+    if (scope === 'sel') {
+      // Partage personnalisé : les liens choisis au clic.
       const all = (await api('/api/items')).items;
-      its = ids.map(id => all.find(it => it.id === id)).filter(it => it && it.url);
-      name = scope === 'sel' ? (document.getElementById('shareName').value.trim() || 'Ma sélection') : ((pub && pub.name) || 'Ma sélection');
+      its = [...selected].map(id => all.find(it => it.id === id)).filter(it => it && it.url);
+      name = document.getElementById('shareName').value.trim() || 'Ma sélection';
     } else {
       const path = scope ? '/api/spaces/' + encodeURIComponent(scope) + '/items' : '/api/items';
       its = (await api(path)).items.filter(it => it.url);
       name = scope ? (spaces.find(s => s.id === scope) || {}).name : 'Mon journal';
     }
+    return boardOf(its, name, thumbs);
+  }
+  // Le contenu actuel d'une page publiée.
+  async function pubBoard(key, pub, { thumbs = false } = {}) {
+    const s = pubSource(key, pub);
+    if (!s.ids) return boardFor(s.src || null, { thumbs });
+    const all = (await api('/api/items')).items;
+    return boardOf(s.ids.map(id => all.find(it => it.id === id)).filter(it => it && it.url), pub.name || 'Ma sélection', thumbs);
+  }
+  async function boardOf(its, name, thumbs) {
     const links = its.map(it => ({ title: it.title, url: it.url, note: it.description }));
     if (thumbs) { // page publiée : petites miniatures intégrées au fichier, dans la limite du budget
       let budget = THUMB_BUDGET;
@@ -888,9 +905,15 @@ const App = (() => {
     const opts = [new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id))];
     if (selected.size) opts.push(new Option(`Ma sélection (${selected.size} lien${selected.size > 1 ? 's' : ''})`, 'sel'));
     const pubs = await Store.publications();
-    for (const [k, p] of Object.entries(pubs)) if (k.startsWith('sel-')) opts.push(new Option(`Page publiée « ${p.name || 'Ma sélection'} »`, k));
+    for (const [k, p] of Object.entries(pubs)) if (p.ids) opts.push(new Option(`Sélection publiée « ${p.name || 'Ma sélection'} »`, k));
     opts.push(new Option('Choisir les liens au clic…', '__pick'));
     sel.replaceChildren(...opts);
+    // Chaque ouverture repart sans protection : un ancien mot de passe ou une ancienne date ne s'appliquent jamais en douce.
+    document.getElementById('sharePw').value = '';
+    document.getElementById('shareExp').value = '';
+    document.getElementById('shareExpDate').value = '';
+    document.getElementById('shareExpDate').hidden = true;
+    lockCache = { pw: '', lock: null };
     if (preset) sel.value = preset;
     else if (activeSpace !== 'all' && activeSpace !== 'trash') sel.value = activeSpace;
     document.getElementById('shareNameGroup').hidden = sel.value !== 'sel';
@@ -984,7 +1007,7 @@ const App = (() => {
       if (navigator.share) button('Envoyer le lien', 'btn-primary', async () => { try { await navigator.share({ title: board.name, url }); } catch { /* annulé */ } });
       button('Copier le lien', navigator.share ? 'btn-ghost' : 'btn-primary', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
     } else if (shareTab === 'publier') {
-      await renderPublish(pane, board, scopeValue || 'all', run);
+      await renderPublish(pane, board, scopeValue || '', run);
     } else {
       const md = ShareCodec.toMarkdown(board);
       const pre = mk('pre', 'share-md'); pre.textContent = md.length > 1200 ? md.slice(0, 1200) + '…' : md; pane.append(pre);
@@ -993,69 +1016,187 @@ const App = (() => {
     }
   }
 
-  // ===== Publier : une page publique servie depuis le Google Drive de son auteur =====
-  // Le fichier vit dans le Drive de la personne ; /p/<id> l'affiche. Modifier la collection met la page à jour,
-  // la retirer supprime le fichier. Rien n'est stocké sur le serveur de leketia.
+  // ===== Publier : des pages publiques servies depuis le Google Drive de leur auteur =====
+  // Chaque page est un fichier du Drive de la personne ; /p/<id> l'affiche. Une même collection (ou sélection)
+  // peut avoir plusieurs pages, chacune avec son mot de passe et sa date limite, modifiables sans changer de lien.
+  // La liste des pages reste sur l'appareil qui les a publiées. Rien n'est stocké sur le serveur de leketia.
   const pageUrl = (id) => `${location.origin}/p/${id}`;
+  const frDate = (iso) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  const isExpired = (pub) => !!pub.expires && Date.parse(pub.expires) <= Date.now();
 
-  async function renderPublish(pane, board, scope, run) {
-    const note = (t) => { const p = mk('p', 'hint share-note'); p.textContent = t; pane.append(p); return p; };
-    const button = (label, cls, fn) => { const b = mk('button', 'btn ' + cls); b.type = 'button'; b.textContent = label; b.addEventListener('click', async () => { b.disabled = true; try { await fn(); } finally { b.disabled = false; } }); pane.append(b); return b; };
-    if (!(await Drive.available())) { note('La publication passe par Google Drive, qui n’est pas configuré sur cette instance.'); return; }
-    const pub = (await Store.publications())[scope];
-    if (run !== shareRun) return;
-
-    if (!pub) {
-      const pw = sharePassword(), exp = shareExpires();
-      const prot = [pw && 'protégée par mot de passe', exp && `visible jusqu'au ${new Date(exp).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`].filter(Boolean).join(', ');
-      note(`Crée une page publique pour « ${board.name} »${prot ? ` (${prot})` : ''}. Le fichier est rangé dans ton Google Drive : toute personne qui a le lien peut l'ouvrir, et elle se met à jour quand tu modifies ${scope === 'sel' ? 'ces liens' : 'la collection'}.`);
-      button('Publier la page', 'btn-primary', async () => {
-        try {
-          const key = await publishScope(scope, { password: pw, expires: exp, name: board.name });
-          toast('Page publiée');
-          if (scope === 'sel') { selected.clear(); await showShare(key); } else renderShare();
-        }
-        catch (e) { toast(e.message, 'error'); }
-      });
-      return;
-    }
-
-    const url = pageUrl(pub.fileId);
-    if (pub.expires && Date.parse(pub.expires) <= Date.now()) { note('Cette page a expiré : elle n’est plus visible.'); }
-    const link = mk('a', 'share-url'); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = url.replace(/^https?:\/\//, ''); pane.append(link);
-    const upToDate = pub.hash === await ShareCodec.pageHash(await boardFor(scope === 'all' ? null : scope, { thumbs: true }));
-    if (run !== shareRun) return;
-    const prot = [pub.keyRaw && 'protégée par mot de passe', pub.expires && `visible jusqu'au ${new Date(pub.expires).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`].filter(Boolean).join(', ');
-    note((upToDate ? (pub.keyRaw ? 'Page publiée et à jour.' : 'Page publiée et à jour. Lisible par une personne, un agent IA, et avec un aperçu dans WhatsApp.') : 'Tu as modifié ces liens depuis la dernière publication.') + (prot ? ` Elle est ${prot}.` : ''));
-    if (!upToDate) button('Mettre à jour la page', 'btn-primary', async () => {
-      try { await updateScope(scope, true); toast('Page mise à jour'); renderShare(); } catch (e) { toast(e.message, 'error'); }
-    });
-    if (navigator.share) button('Envoyer le lien', upToDate ? 'btn-primary' : 'btn-ghost', async () => { try { await navigator.share({ title: board.name, url }); } catch { /* annulé */ } });
-    button('Copier le lien', 'btn-ghost', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
-    button('Retirer la page', 'btn-ghost share-danger', async () => {
-      if (!(await showConfirm('Retirer cette page ? Le lien ne marchera plus et le fichier sera supprimé de ton Google Drive.', 'Retirer', { danger: true }))) return;
-      try { await unpublishScope(scope); toast('Page retirée'); renderShare(); } catch (e) { toast(e.message, 'error'); }
-    });
+  // Les pages publiées pour ce qui est choisi dans « Quoi partager ? ».
+  function pagesOf(all, scope) {
+    if (isPageKey(scope)) return all[scope] ? [[scope, all[scope]]] : [];
+    if (scope === 'sel') return [];
+    return Object.entries(all).filter(([k, p]) => !p.ids && pubSource(k, p).src === scope);
+  }
+  function pubLabel(key, pub) {
+    const s = pubSource(key, pub);
+    if (s.ids) return `Sélection « ${pub.name || 'Ma sélection'} »`;
+    if (!s.src) return 'Tout le journal';
+    const sp = spaces.find(x => x.id === s.src);
+    return sp ? `Collection « ${sp.name} »` : 'Collection supprimée';
+  }
+  function pubSettings(pub) {
+    return [pub.keyRaw ? 'Mot de passe' : 'Sans mot de passe',
+      isExpired(pub) ? 'Expirée' : pub.expires ? `Jusqu'au ${frDate(pub.expires)}` : 'Sans limite',
+      `Publiée le ${frDate(pub.publishedAt)}`].join(' · ');
   }
 
-  // Publie ; renvoie la clé de la publication (« sel-… » pour une sélection, qui garde la liste de ses liens).
-  async function publishScope(scope, { password = '', expires = '', name = '' } = {}) {
-    const board = await boardFor(scope === 'all' ? null : scope, { thumbs: true });
-    if (expires) board.expires = expires;
-    let key = scope, extra = {};
-    if (scope === 'sel') { key = 'sel-' + crypto.randomUUID().slice(0, 8); extra = { ids: [...selected], name: name || board.name }; }
+  // Une page publiée : son lien, ses réglages, et ce qu'on peut en faire.
+  function pageCard(key, pub, { withSource = false, onChange } = {}) {
+    const box = mk('div', 'pub-card');
+    if (withSource) { const t = mk('p', 'pub-source'); t.textContent = pubLabel(key, pub); box.append(t); }
+    const url = pageUrl(pub.fileId);
+    const link = mk('a', 'share-url'); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = url.replace(/^https?:\/\//, '');
+    const meta = mk('p', 'hint pub-meta'); meta.textContent = pubSettings(pub);
+    const row = mk('div', 'pub-actions');
+    const act = (label, cls, fn) => { const b = mk('button', 'btn btn-sm ' + cls); b.type = 'button'; b.textContent = label; b.addEventListener('click', async () => { b.disabled = true; try { await fn(); } finally { b.disabled = false; } }); row.append(b); return b; };
+    act('Copier le lien', 'btn-ghost', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
+    if (navigator.share) act('Envoyer', 'btn-ghost', async () => { try { await navigator.share({ title: pub.name || 'leketia', url }); } catch { /* annulé */ } });
+    act('Modifier', 'btn-ghost', async () => { box.querySelector('.pub-edit') ? box.querySelector('.pub-edit').remove() : box.append(pageEditor(key, pub, onChange)); });
+    act('Retirer', 'btn-ghost share-danger', async () => {
+      if (!(await showConfirm('Retirer cette page ? Son lien ne marchera plus et le fichier sera supprimé de ton Google Drive.', 'Retirer', { danger: true }))) return;
+      try { await unpublishPage(key); toast('Page retirée'); onChange && onChange(); } catch (e) { toast(e.message, 'error'); }
+    });
+    box.append(link, meta, row);
+    return box;
+  }
+
+  // Modifier le mot de passe ou la date limite d'une page : même lien, contenu réécrit dans le Drive.
+  function pageEditor(key, pub, onChange) {
+    const ed = mk('div', 'pub-edit');
+    const uid = key.replace(/[^a-z0-9]/gi, '');
+    ed.innerHTML = `
+      <div class="form-group"><label for="pw-mode-${uid}">Mot de passe</label>
+        <select id="pw-mode-${uid}" class="pw-mode">
+          ${pub.keyRaw ? '<option value="keep">Garder le mot de passe actuel</option>' : '<option value="none">Sans mot de passe</option>'}
+          <option value="new">${pub.keyRaw ? 'Changer le mot de passe' : 'Ajouter un mot de passe'}</option>
+          ${pub.keyRaw ? '<option value="none">Retirer le mot de passe</option>' : ''}
+        </select>
+        <input type="password" class="pw-new" autocomplete="new-password" placeholder="Nouveau mot de passe" hidden aria-label="Nouveau mot de passe">
+      </div>
+      <div class="form-group"><label for="exp-${uid}">Visible jusqu'au</label>
+        <select id="exp-${uid}" class="exp-mode">
+          ${pub.expires && !isExpired(pub) ? `<option value="keep">Garder : ${frDate(pub.expires)}</option>` : ''}
+          <option value="">Sans limite</option><option value="1">24 heures</option><option value="7">7 jours</option><option value="30">30 jours</option><option value="custom">Choisir une date…</option>
+        </select>
+        <input type="date" class="exp-date" hidden aria-label="Date limite">
+      </div>`;
+    const mode = ed.querySelector('.pw-mode'), pwIn = ed.querySelector('.pw-new'), expSel = ed.querySelector('.exp-mode'), expDate = ed.querySelector('.exp-date');
+    mode.addEventListener('change', () => { pwIn.hidden = mode.value !== 'new'; if (!pwIn.hidden) pwIn.focus(); });
+    expSel.addEventListener('change', () => { expDate.hidden = expSel.value !== 'custom'; });
+    const save = mk('button', 'btn btn-sm btn-primary'); save.type = 'button'; save.textContent = 'Enregistrer';
+    save.addEventListener('click', async () => {
+      // Valeurs lues au moment du toucher, jamais à l'affichage.
+      if (mode.value === 'new' && !pwIn.value) { toast('Écris le nouveau mot de passe', 'error'); pwIn.focus(); return; }
+      let expires;
+      if (expSel.value === 'keep') expires = pub.expires;
+      else if (expSel.value === 'custom') { if (!expDate.value) { toast('Choisis une date', 'error'); return; } expires = new Date(expDate.value + 'T23:59:59').toISOString(); }
+      else expires = expSel.value ? new Date(Date.now() + Number(expSel.value) * 86400000).toISOString() : '';
+      save.disabled = true;
+      try {
+        await editPage(key, { password: mode.value === 'new' ? pwIn.value : mode.value === 'none' ? '' : null, expires });
+        toast('Page modifiée : même lien, nouveaux réglages');
+        onChange && onChange();
+      } catch (e) { toast(e.message, 'error'); save.disabled = false; }
+    });
+    ed.append(save);
+    return ed;
+  }
+
+  async function renderPublish(pane, board, scope, run) {
+    const note = (t, cls = 'hint share-note') => { const p = mk('p', cls); p.textContent = t; pane.append(p); return p; };
+    if (!(await Drive.available())) { note('La publication passe par Google Drive, qui n’est pas configuré sur cette instance.'); return; }
+    const all = await Store.publications();
+    if (run !== shareRun) return;
+    const refresh = () => renderShare();
+
+    // Nouvelle page pour ce choix (une sélection déjà publiée se modifie dans sa carte, plus bas).
+    if (!isPageKey(scope)) {
+      const pw = sharePassword(), exp = shareExpires();
+      const prot = [pw && 'protégée par mot de passe', exp && `visible jusqu'au ${frDate(exp)}`].filter(Boolean).join(', ');
+      note(`Nouvelle page pour « ${board.name} »${prot ? ` (${prot})` : ''}. Le fichier est rangé dans ton Google Drive : toute personne qui a le lien peut l'ouvrir, et elle se met à jour quand tu modifies ${scope === 'sel' ? 'ces liens' : 'la collection'}. Mot de passe et date limite : dans « Protection » ci-dessus.`);
+      const b = mk('button', 'btn btn-primary'); b.type = 'button'; b.textContent = 'Publier une nouvelle page';
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          // Protection lue au moment du toucher : c'est ce qui est écrit à cet instant qui s'applique.
+          const key = await publishPage(scope, { password: sharePassword(), expires: shareExpires(), name: board.name });
+          toast('Page publiée');
+          if (scope === 'sel') { selected.clear(); await showShare(key); } else renderShare();
+        } catch (e) { toast(e.message, 'error'); b.disabled = false; }
+      });
+      pane.append(b);
+    }
+
+    const mine = pagesOf(all, scope).sort((a, b) => b[1].publishedAt - a[1].publishedAt);
+    if (mine.length) {
+      const h = mk('h3', 'pub-title'); h.textContent = mine.length > 1 ? `${mine.length} pages publiées ici` : 'Page publiée ici'; pane.append(h);
+      for (const [k, p] of mine) pane.append(pageCard(k, p, { onChange: refresh }));
+    }
+    const total = Object.keys(all).length;
+    if (total) {
+      const more = mk('button', 'btn btn-ghost pub-all'); more.type = 'button';
+      more.textContent = `Toutes mes pages publiées (${total})`;
+      more.addEventListener('click', showPages);
+      pane.append(more);
+    }
+  }
+
+  // Toutes les pages publiées depuis cet appareil, quelle que soit leur source.
+  async function showPages() {
+    const list = document.getElementById('pagesList');
+    const draw = async () => {
+      const all = Object.entries(await Store.publications()).sort((a, b) => b[1].publishedAt - a[1].publishedAt);
+      list.replaceChildren();
+      if (!all.length) { const p = mk('p', 'hint'); p.textContent = 'Aucune page publiée depuis cet appareil.'; list.append(p); return; }
+      for (const [k, p] of all) list.append(pageCard(k, p, { withSource: true, onChange: draw }));
+    };
+    closeShare();
+    await draw();
+    document.getElementById('pagesModal').classList.add('active');
+  }
+  function closePages() { document.getElementById('pagesModal').classList.remove('active'); }
+
+  // Publie une nouvelle page ; renvoie sa clé.
+  async function publishPage(scope, { password = '', expires = '', name = '' } = {}) {
+    const key = 'pg-' + crypto.randomUUID().slice(0, 8);
+    const pub = scope === 'sel' ? { ids: [...selected], name: name || 'Ma sélection' } : { src: scope || '', name };
+    const board = await pubBoard(key, pub, { thumbs: true });
+    if (expires) { board.expires = expires; pub.expires = expires; }
     let page = ShareCodec.toPage(board);
     if (password) {
       const k = await ShareCodec.newKey(password);
       page = await ShareCodec.toLockedPage(board, k.key, k.salt);
-      extra.keyRaw = k.raw; extra.salt = k.saltB64; // la clé (pas le mot de passe) reste sur l'appareil pour les mises à jour
+      pub.keyRaw = k.raw; pub.salt = k.saltB64; // la clé (pas le mot de passe) reste sur l'appareil pour les mises à jour
     }
     const fileId = await Drive.publish(page, board.name);
     const all = await Store.publications();
-    all[key] = { fileId, hash: await ShareCodec.pageHash(board), publishedAt: Date.now(), updatedAt: Date.now(), ...(expires ? { expires } : {}), ...extra };
+    all[key] = { ...pub, fileId, hash: await ShareCodec.pageHash(board), publishedAt: Date.now(), updatedAt: Date.now() };
     await Store.savePublications(all);
     return key;
   }
+
+  // Nouveaux réglages d'une page existante : password null = garder, '' = retirer ; même fichier, même lien.
+  async function editPage(key, { password = null, expires }) {
+    const all = await Store.publications();
+    const pub = all[key];
+    if (!pub) throw new Error('Page introuvable');
+    const next = { ...pub };
+    if (expires) next.expires = expires; else delete next.expires;
+    if (password === '') { delete next.keyRaw; delete next.salt; }
+    else if (password) { const k = await ShareCodec.newKey(password); next.keyRaw = k.raw; next.salt = k.saltB64; }
+    const board = await pubBoard(key, next, { thumbs: true });
+    try { await Drive.update(next.fileId, await pageFor(next, board)); }
+    catch (e) {
+      if (e.status === 404) { delete all[key]; await Store.savePublications(all); throw new Error('Le fichier de la page a été supprimé du Drive : la page n’est plus publiée'); }
+      throw e;
+    }
+    all[key] = { ...next, hash: await ShareCodec.pageHash(board), updatedAt: Date.now() };
+    await Store.savePublications(all);
+  }
+
   async function pageFor(pub, board) {
     if (pub.expires) board.expires = pub.expires;
     if (!pub.keyRaw) return ShareCodec.toPage(board);
@@ -1064,36 +1205,39 @@ const App = (() => {
   // Pages expirées : le fichier est retiré du Drive dès que l'app peut le faire sans fenêtre.
   async function cleanupExpired() {
     const all = await Store.publications();
-    const dead = Object.entries(all).filter(([, p]) => p.expires && Date.parse(p.expires) <= Date.now());
+    const dead = Object.entries(all).filter(([, p]) => isExpired(p));
     if (!dead.length || !(await Drive.canPublishSilently())) return;
     for (const [k, p] of dead) { try { await Drive.unpublish(p.fileId); delete all[k]; } catch { /* au prochain passage */ } }
     await Store.savePublications(all);
   }
 
   // Réécrit le fichier si le contenu a changé. Sans geste de la personne, seulement si Google a déjà donné l'accès.
-  async function updateScope(scope, interactive) {
+  async function updatePage(key, interactive) {
     const all = await Store.publications();
-    const pub = all[scope];
-    if (!pub) return;
-    if (scope !== 'all' && !scope.startsWith('sel-') && !spaces.some(s => s.id === scope)) return; // collection supprimée : la page reste, à retirer à la main
-    if (pub.expires && Date.parse(pub.expires) <= Date.now()) return;
-    const board = await boardFor(scope === 'all' ? null : scope, { thumbs: true });
+    const pub = all[key];
+    if (!pub || isExpired(pub)) return;
+    const s = pubSource(key, pub);
+    if (!s.ids && s.src && !spaces.some(x => x.id === s.src)) return; // collection supprimée : la page reste, à retirer à la main
+    const board = await pubBoard(key, pub, { thumbs: true });
     const hash = await ShareCodec.pageHash(board);
     if (hash === pub.hash) return;
-    if (!interactive && !(await Drive.canPublishSilently())) return; // mise à jour au prochain passage dans Partager › Publier
+    if (!interactive && !(await Drive.canPublishSilently())) return; // mise à jour au prochain passage
     try { await Drive.update(pub.fileId, await pageFor(pub, board)); }
     catch (e) {
-      if (e.status === 404) { delete all[scope]; await Store.savePublications(all); throw new Error('Le fichier de la page a été supprimé du Drive : la page n’est plus publiée'); }
+      if (e.status === 404) { delete all[key]; await Store.savePublications(all); throw new Error('Le fichier de la page a été supprimé du Drive : la page n’est plus publiée'); }
       throw e;
     }
-    all[scope] = { ...pub, hash, updatedAt: Date.now() };
+    all[key] = { ...pub, hash, updatedAt: Date.now() };
     await Store.savePublications(all);
   }
 
-  async function unpublishScope(scope) {
+  async function unpublishPage(key) {
     const all = await Store.publications();
-    if (all[scope]) await Drive.unpublish(all[scope].fileId);
-    delete all[scope];
+    if (all[key]) {
+      try { await Drive.unpublish(all[key].fileId); }
+      catch (e) { if (e.status !== 404) throw e; } // déjà supprimé du Drive : on oublie la page
+    }
+    delete all[key];
     await Store.savePublications(all);
   }
 
@@ -1104,7 +1248,7 @@ const App = (() => {
     clearTimeout(publishTimer);
     publishTimer = setTimeout(async () => {
       const all = await Store.publications();
-      for (const scope of Object.keys(all)) { try { await updateScope(scope, false); } catch { /* réessayé à la prochaine modification */ } }
+      for (const key of Object.keys(all)) { try { await updatePage(key, false); } catch { /* réessayé à la prochaine modification */ } }
     }, 3000);
   };
   window.addEventListener('leketia:changed', schedulePublishUpdate);
@@ -1754,7 +1898,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, syncTap, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, scopeChanged, shareOptionsChanged, stopSelecting, shareSelection, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace, newCatInline,
+  return { loadSpaces, syncTap, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, scopeChanged, shareOptionsChanged, stopSelecting, shareSelection, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace, newCatInline, showPages, closePages,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

@@ -671,6 +671,21 @@ body.reordering { user-select: none; -webkit-user-select: none; }
 .cat-checks .cat-check:has(input:checked):hover { background: var(--accent-light); }
 /* Focus clavier (le focus porte sur l'input masqué) */
 .cat-checks .cat-check:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* « + Nouvelle collection » : pastille en pointillés, qui devient un champ au toucher */
+.cat-checks .cat-new, .cat-checks .cat-new-input {
+  min-height: 40px; padding: 8px 14px; border-radius: var(--r-full);
+  font: 500 12px var(--font); color: var(--accent);
+  border: 1px dashed var(--accent); background: transparent;
+}
+.cat-checks .cat-new { cursor: pointer; transition: background var(--dur-fast) var(--ease-out); }
+.cat-checks .cat-new:hover { background: var(--accent-soft); }
+.cat-checks .cat-new:active { transform: scale(0.97); }
+.cat-checks .cat-new-input { color: var(--ink); background: var(--surface-elevated); border-style: solid; min-width: 180px; font-size: 16px; }
+.cat-checks .cat-new-input:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Aperçu d'un lien sans image : le lecteur du post lui-même */
+.link-preview-embed { display: block; width: 100%; height: 460px; border: 0; border-radius: var(--r-sm); background: var(--surface-sunken); }
+.link-preview-embed.embed-youtube { height: auto; aspect-ratio: 16 / 9; }
+.link-preview-embed.embed-tiktok { height: min(560px, 70vh); }
 .hint { color: var(--ink-muted); font-weight: 400; font-size: 11px; }
 
 /* Puces catégories sur la carte */

@@ -12,6 +12,7 @@ const App = (() => {
   let mediaFile = null; // File choisi (image ou vidéo) — uploadé en streaming, pas de base64
   let mediaKind = 'image';
   let linkCanonicalUrl = ''; // URL résolue par le serveur (liens courts TikTok → URL embarquable)
+  let linkImageUrl = ''; // image d'aperçu trouvée par le serveur, gardée pour la carte même quand le lecteur l'a remplacée
   let sharedMediaUrl = null;      // média déjà stocké en R2 via /share-target (partage natif) → pas de ré-upload
   let sharedMediaKind = 'image';  // 'image' | 'video' du média partagé
   let sharedIntentHandled = false; // un seul traitement du partage par chargement de page
@@ -208,7 +209,40 @@ const App = (() => {
     const sel = new Set(selectedIds || []);
     document.getElementById(containerId).innerHTML = spaces.map(s =>
       `<label class="cat-check"><input type="checkbox" value="${s.id}"${sel.has(s.id) ? ' checked' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg><span>${esc(s.name)}</span></label>`
-    ).join('') || '<span class="hint">Aucune catégorie — créez-en une d\'abord.</span>';
+    ).join('') + `<button type="button" class="cat-new" onclick="App.newCatInline('${containerId}')">+ Nouvelle collection</button>`;
+  }
+  // Créer une collection sans quitter la fenêtre d'ajout : la pastille devient un champ, Entrée crée et coche.
+  function newCatInline(containerId) {
+    const box = document.getElementById(containerId);
+    const btn = box.querySelector('.cat-new');
+    if (!btn) return;
+    const input = mk('input', 'cat-new-input');
+    input.type = 'text'; input.maxLength = 60; input.placeholder = 'Nom de la collection';
+    input.setAttribute('aria-label', 'Nom de la nouvelle collection');
+    btn.replaceWith(input);
+    input.focus();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return;
+      done = true;
+      const keep = getCheckedCats(containerId);
+      const name = input.value.trim();
+      if (save && name) {
+        try {
+          const r = await api('/api/spaces', { method: 'POST', body: { name } });
+          await loadSpaces();
+          renderCatChecks(containerId, r.space ? [...keep, r.space.id] : keep);
+          toast('Collection créée');
+          return;
+        } catch (e) { toast(e.message, 'error'); }
+      }
+      renderCatChecks(containerId, keep);
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
   }
   function getCheckedCats(containerId) {
     return [...document.querySelectorAll('#' + containerId + ' input:checked')].map(i => i.value);
@@ -564,6 +598,7 @@ const App = (() => {
     sharedMediaUrl = null;
     sharedMediaKind = 'image';
     linkCanonicalUrl = '';
+    linkImageUrl = '';
     lastAutoFetched = '';
     if (_linkDebounce) { clearTimeout(_linkDebounce); _linkDebounce = null; }
     switchModalTab('link');
@@ -575,6 +610,18 @@ const App = (() => {
     document.getElementById('tabPhoto').style.display = tab === 'photo' ? '' : 'none';
     document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   }
+
+  // Le lecteur de X annonce la hauteur réelle du tweet : l'aperçu prend cette hauteur, sans vide dessous.
+  window.addEventListener('message', (e) => {
+    if (e.origin !== 'https://platform.twitter.com') return;
+    let d = e.data;
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
+    const m = d && d['twttr.embed'];
+    const h = m && m.method === 'twttr.private.resize' && m.params && m.params[0] && Number(m.params[0].height);
+    if (!h) return;
+    const frame = [...document.querySelectorAll('.link-preview-embed')].find((f) => f.contentWindow === e.source);
+    if (frame) frame.style.height = Math.min(Math.max(h + 4, 120), 900) + 'px';
+  });
 
   async function fetchLinkPreview() {
     const url = document.getElementById('linkUrl').value.trim();
@@ -593,8 +640,26 @@ const App = (() => {
       linkCanonicalUrl = data.canonical_url || '';
       document.getElementById('linkTitle').value = p.title || '';
       document.getElementById('linkDesc').value = p.description || '';
-        let imgHtml = p.image_url ? `<img src="${esc(p.image_url)}" alt="preview" onerror="this.style.display='none'">` : '';
-      let noteHtml = data.note ? `<div class="desc" style="color:var(--warning,#b45309)">${esc(data.note)}</div>` : '';
+      // Instagram, TikTok et X : le post lui-même sert d'aperçu (lecteur intégré), comme dans la carte.
+      // L'image éventuelle (miniature, photo de profil sur X) est gardée à part pour la carte.
+      // Autres liens : le lecteur seulement s'il n'y a pas d'image.
+      linkImageUrl = p.image_url || '';
+      const e0 = getEmbed(linkCanonicalUrl || lastAutoFetched);
+      const emb = e0 && (['instagram', 'tiktok', 'twitter'].includes(e0.platform) || !p.image_url) ? e0 : null;
+      if (emb) {
+        preview.replaceChildren();
+        const frame = mk('iframe', 'link-preview-embed embed-' + emb.platform);
+        frame.src = emb.src;
+        frame.title = 'Aperçu du post';
+        frame.loading = 'lazy';
+        frame.allow = 'encrypted-media; picture-in-picture; fullscreen';
+        frame.referrerPolicy = 'strict-origin-when-cross-origin';
+        preview.append(frame);
+        if (!p.title || /^(instagram|tiktok|vidéo tiktok|x)$/i.test(p.title)) document.getElementById('linkTitle').value = '';
+        return;
+      }
+      let imgHtml = p.image_url ? `<img src="${esc(p.image_url)}" alt="preview" onerror="this.style.display='none'">` : '';
+      let noteHtml = data.note ? `<div class="desc">${esc(data.note)}</div>` : '';
       preview.innerHTML = imgHtml + (p.title ? `<div class="desc">${esc(p.title)}</div>` : '') + noteHtml;
       if (!p.title && !p.image_url && !data.note) preview.innerHTML = '<div class="desc">Aucune info trouvée. Remplissez manuellement.</div>';
     } catch (e) { preview.innerHTML = `<div class="desc" style="color:var(--danger)">${esc(e.message)}</div>`; }
@@ -633,7 +698,7 @@ const App = (() => {
             type: 'link', url: linkCanonicalUrl || url, space_ids: cats,
             title: document.getElementById('linkTitle').value.trim(),
             description: document.getElementById('linkDesc').value.trim(),
-            image_url: document.getElementById('linkPreview').querySelector('img')?.src || '',
+            image_url: linkImageUrl || document.getElementById('linkPreview').querySelector('img')?.src || '',
           }
         });
       } else {
@@ -1656,7 +1721,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, syncTap, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, scopeChanged, shareOptionsChanged, stopSelecting, shareSelection, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, syncTap, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, scopeChanged, shareOptionsChanged, stopSelecting, shareSelection, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace, newCatInline,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

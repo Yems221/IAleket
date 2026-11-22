@@ -4,7 +4,7 @@
 //    les mises à jour arrivent tout de suite. Icônes : cache d'abord.
 importScripts('/idb.js');
 
-const CACHE_NAME = 'leketia-v18';
+const CACHE_NAME = 'leketia-v19';
 const STATIC_ASSETS = [
   '/',
   '/app.css',
@@ -57,6 +57,7 @@ self.addEventListener('fetch', (event) => {
   if (
     event.request.mode === 'navigate' ||
     url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.mjs') || // modules : le réseau d'abord, sinon une ancienne version reste servie après un déploiement
     url.pathname.endsWith('.css') ||
     url.pathname === '/manifest.webmanifest'
   ) {

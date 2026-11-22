@@ -2,7 +2,7 @@
 // Le journal partagé est un fichier du dossier caché du Drive (leketia-sync.json), lisible seulement par leketia.
 // Chaque passage : lire la version du Drive (si elle a changé), fusionner lien par lien avec cet appareil,
 // appliquer ici, renvoyer si le Drive est en retard. Les images voyagent à part, une seule fois chacune.
-// Passages : à l'ouverture, au retour sur l'app, toutes les 30 s tant qu'elle est visible, et 2 s après une modification.
+// Passages : à l'ouverture, au retour sur l'app, toutes les 2 minutes tant qu'elle est visible, et 2 s après une modification.
 const Sync = (() => {
   const FILE = 'leketia-sync.json';
   const MEDIA = 'leketia-media-';
@@ -148,7 +148,7 @@ const Sync = (() => {
     window.addEventListener('online', run);
     window.addEventListener('leketia:changed', () => { clearTimeout(debounce); debounce = setTimeout(run, 2000); });
     clearInterval(timer);
-    timer = setInterval(() => { if (document.visibilityState === 'visible') run(); }, 30000);
+    timer = setInterval(() => { if (document.visibilityState === 'visible') run(); }, 120000);
   }
 
   return { start, run, state: () => state };

@@ -984,7 +984,7 @@ const App = (() => {
     line.textContent = !linked ? 'Synchronisation désactivée sur cet appareil.'
       : st.status === 'syncing' ? 'Synchronisation en cours…'
       : st.status === 'error' ? `Synchronisation en échec : ${st.error}`
-      : st.at ? `Synchronisé ${new Date(st.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}. Tes autres appareils récupèrent tes ajouts à l'ouverture, puis toutes les 30 secondes.`
+      : st.at ? `Synchronisé ${new Date(st.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}. Tes autres appareils récupèrent tes ajouts à l'ouverture, puis toutes les 2 minutes.`
       : 'Synchronisation activée.';
     line.classList.toggle('is-on', linked && st.status !== 'error');
     return linked;

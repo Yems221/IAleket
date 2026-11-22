@@ -11,8 +11,10 @@ const InstallParcours = (() => {
   const VUE_WEB_ANDROID = /Android.*; wv\)/;
 
   function parcours(ua, pointsTactiles = 0, brave = false) {
-    if (INTEGRE.test(ua) || VUE_WEB_ANDROID.test(ua)) return 'integre';
     const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && pointsTactiles > 1);
+    // Sur iPhone, on installe depuis Safari : le navigateur intégré d'une appli doit d'abord y ouvrir la page.
+    if (INTEGRE.test(ua)) return ios ? 'ios-integre' : 'integre';
+    if (VUE_WEB_ANDROID.test(ua)) return 'integre';
     if (ios) {
       if (/CriOS/.test(ua)) return 'ios-chrome';
       if (/FxiOS|EdgiOS|OPiOS|OPT\//.test(ua) || brave) return 'ios-autre';
@@ -31,8 +33,10 @@ const InstallParcours = (() => {
     'ios-safari-27': [['Touchez ≡ à côté de l’adresse, en bas de Safari.', 'safari-menu-adresse'], ['Faites défiler, puis touchez Sur l’écran d’accueil.', 'ligne-accueil'], ['Laissez Ouvrir comme app web activé, puis touchez Ajouter.', 'bascule']],
     'ios-safari-26': [['Touchez ⋯ en bas à droite de Safari.', 'safari-plus'], ['Touchez Partager.', 'ligne-partager'], ['Faites défiler, puis touchez Sur l’écran d’accueil.', 'ligne-accueil'], ['Laissez Ouvrir comme app web activé, puis touchez Ajouter.', 'bascule']],
     'ios-safari': [['Touchez Partager, en bas de Safari.', 'safari-partager'], ['Faites défiler, puis touchez Sur l’écran d’accueil.', 'ligne-accueil'], ['Touchez Ajouter.', null]],
-    'ios-chrome': [['Touchez Partager, en haut à droite dans la barre d’adresse.', 'chrome-partager'], ['Faites défiler, puis touchez Sur l’écran d’accueil.', 'ligne-accueil'], ['Touchez Ajouter.', null]],
-    'ios-autre': [['Ouvrez le menu de votre navigateur, puis touchez Partager.', 'ligne-partager'], ['Faites défiler, puis touchez Sur l’écran d’accueil.', 'ligne-accueil'], ['Touchez Ajouter.', null]],
+    // Sur iPhone, l'app s'installe depuis Safari : c'est là que s'ouvrent les liens partagés vers leketia.
+    'ios-chrome': [['Sur iPhone, leketia s’installe depuis Safari. Ouvrez cette page dans Safari.', null], ['Dans Safari, touchez Installer l’application en haut de la page, puis suivez le guide.', null]],
+    'ios-autre': [['Sur iPhone, leketia s’installe depuis Safari. Ouvrez cette page dans Safari.', null], ['Dans Safari, touchez Installer l’application en haut de la page, puis suivez le guide.', null]],
+    'ios-integre': [['Cette application ne peut pas installer leketia. Ouvrez cette page dans Safari (ou menu ⋯ › Ouvrir dans Safari).', 'menu-integre'], ['Dans Safari, touchez Installer l’application en haut de la page, puis suivez le guide.', null]],
     android: [['Touchez le menu ⋮ de votre navigateur.', 'menu-android'], ['Touchez Installer l’application ou Ajouter à l’écran d’accueil.', 'ligne-installer'], ['Confirmez.', null]],
     'android-autre': [['Ce navigateur ne peut pas installer l’application. Ouvrez cette page dans Chrome.', null], ['Dans Chrome, touchez Installer l’application, puis Installer.', 'ligne-installer']],
     integre: [['Touchez le menu de l’application ouverte (⋯ ou ⋮).', 'menu-integre'], ['Touchez Ouvrir dans le navigateur.', null], ['Dans votre navigateur, revenez sur cette page pour installer l’application.', null]],
@@ -43,8 +47,9 @@ const InstallParcours = (() => {
     'ios-safari-27': '≡ › Sur l’écran d’accueil › Ajouter',
     'ios-safari-26': '⋯ › Partager › Sur l’écran d’accueil › Ajouter',
     'ios-safari': 'Partager › Sur l’écran d’accueil › Ajouter',
-    'ios-chrome': 'Partager (en haut) › Sur l’écran d’accueil › Ajouter',
-    'ios-autre': 'Menu › Partager › Sur l’écran d’accueil › Ajouter',
+    'ios-chrome': 'Ouvrir dans Safari › Installer l’application',
+    'ios-autre': 'Ouvrir dans Safari › Installer l’application',
+    'ios-integre': 'Menu ⋯ › Ouvrir dans Safari › Installer l’application',
     android: '⋮ › Installer l’application',
     'android-autre': 'Ouvrir dans Chrome › Installer l’application',
     integre: 'Menu › Ouvrir dans le navigateur',
@@ -52,7 +57,7 @@ const InstallParcours = (() => {
 
   const NAVIGATEUR = {
     'ios-safari-27': 'Safari sur iPhone', 'ios-safari-26': 'Safari sur iPhone', 'ios-safari': 'Safari sur iPhone',
-    'ios-chrome': 'Chrome sur iPhone', 'ios-autre': 'Votre navigateur sur iPhone', android: 'Votre navigateur sur Android',
+    'ios-chrome': 'Chrome sur iPhone', 'ios-autre': 'Votre navigateur sur iPhone', 'ios-integre': 'Navigateur d’une application sur iPhone', android:'Votre navigateur sur Android',
     'android-autre': 'Navigateur sur Android', integre: 'Navigateur d’une application',
   };
 

@@ -9,6 +9,7 @@ const UA = {
   samsung: 'Mozilla/5.0 (Linux; Android 14; SM-S921B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/28.0 Chrome/130.0.0.0 Mobile Safari/537.36',
   firefoxAndroid: 'Mozilla/5.0 (Android 14; Mobile; rv:144.0) Gecko/144.0 Firefox/144.0',
   vueWebAndroid: 'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36',
+  instagramAndroid: 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP2A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36 Instagram 390.0.0',
   instagram: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 390.0.0',
   safari27: 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Mobile/15E148 Safari/604.1',
   safari26: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.1 Mobile/15E148 Safari/604.1',
@@ -24,9 +25,13 @@ test('Brave, Samsung et Firefox sur Android passent par Chrome', () => {
   assert.equal(parcours(UA.samsung), 'android-autre');
   assert.equal(parcours(UA.firefoxAndroid), 'android-autre');
 });
-test('navigateur intégré à une appli : ouvrir dans le navigateur', () => {
-  assert.equal(parcours(UA.instagram), 'integre');
+test('navigateur intégré à une appli : Safari d’abord sur iPhone, le navigateur sur Android', () => {
+  assert.equal(parcours(UA.instagram), 'ios-integre');
   assert.equal(parcours(UA.vueWebAndroid), 'integre');
+  assert.equal(parcours(UA.instagramAndroid), 'integre');
+});
+test('Chrome et autres navigateurs sur iPhone : le guide renvoie vers Safari', () => {
+  for (const p of ['ios-chrome', 'ios-autre', 'ios-integre']) assert.match(ETAPES[p].at(-1)[0], /Safari/);
 });
 test('Safari sur iPhone, selon sa version', () => {
   assert.equal(parcours(UA.safari27), 'ios-safari-27');

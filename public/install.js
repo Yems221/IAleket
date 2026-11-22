@@ -36,7 +36,7 @@ const Install = (() => {
     navigator.getInstalledRelatedApps().then((apps) => { if (apps && apps.length) { noterInstallee(); render(); } }).catch(() => {});
   }
 
-  const direct = () => !!deferred && parcours !== 'integre' && parcours !== 'android-autre';
+  const direct = () => !!deferred && parcours !== 'integre' && parcours !== 'ios-integre' && parcours !== 'android-autre';
 
   async function lancer() {
     if (!direct()) { ouvrirGuide(); return; }
@@ -156,6 +156,17 @@ const Install = (() => {
         cp.type = 'button';
         cp.addEventListener('click', () => copier(cp));
         extra.append(ouvrir, cp, el('p', 'gi-note', 'Sans Chrome sur ton téléphone, utilise l’application ici, sans l’installer.'));
+      }
+      if (['ios-chrome', 'ios-autre', 'ios-integre'].includes(parcours) && i === 0) {
+        // Ouvrir la même page dans Safari (schéma x-safari-https, iOS 17 et plus). Le choix d'un seul navigateur
+        // pour l'iPhone est assumé ici : c'est là que s'ouvrent les liens partagés vers leketia.
+        const ouvrir = el('button', 'btn btn-primary', 'Ouvrir dans Safari');
+        ouvrir.type = 'button';
+        ouvrir.addEventListener('click', () => { location.href = `x-safari-${location.origin}/`; });
+        const cp = el('button', 'btn btn-ghost', 'Copier le lien');
+        cp.type = 'button';
+        cp.addEventListener('click', () => copier(cp));
+        extra.append(ouvrir, cp, el('p', 'gi-note', 'Rien ne s’ouvre ? Copie le lien, ouvre Safari et colle-le dans la barre d’adresse.'));
       }
       if (parcours === 'integre' && derniere) {
         const cp = el('button', 'btn btn-ghost', 'Copier le lien');

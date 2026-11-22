@@ -49,17 +49,16 @@ export function htmlPage(opts: { title: string; description: string; origin: str
 <meta name="twitter:card" content="summary">
 <link rel="icon" type="image/svg+xml" href="/brand/leketia-favicon.svg">
 <meta name="theme-color" content="#1F4BC9" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0b1640" media="(prefers-color-scheme: dark)">
-<link rel="stylesheet" href="/tokens.css?v=1">${extraHead}
+<link rel="stylesheet" href="/tokens.css?v=2">${extraHead}
 <style>
-:root{--muted:var(--ink-secondary);--blue:var(--accent);--bg:var(--paper);--card:var(--surface-elevated);--line:var(--border-light)}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--font)}
 main{max-width:720px;margin:0 auto;padding:28px 16px 64px}header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
 header img{width:40px;height:40px}header a{color:var(--ink);text-decoration:none;font-weight:700;font-size:19px;letter-spacing:-.03em}
-h1{font-size:26px;line-height:1.2;margin:0 0 4px;overflow-wrap:anywhere}.meta{color:var(--muted);font-size:14px;margin:0 0 20px}
+h1{font-family:var(--font-display);font-weight:800;letter-spacing:-.03em;font-size:28px;line-height:1.15;margin:0 0 4px;overflow-wrap:anywhere}.meta{color:var(--ink-secondary);font-size:14px;margin:0 0 20px}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 24px}.btn{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:999px;font-weight:600;text-decoration:none}
 .primary{background:var(--accent-fill);color:var(--on-accent)}.ghost{border:1px solid var(--border-strong);color:var(--ink)}
 .btn{transition:transform 120ms cubic-bezier(.23,1,.32,1);-webkit-tap-highlight-color:transparent}.btn:active{transform:scale(.97)}
-a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.btn{transition:none}}
 ${BOARD_CSS}
 .lock{display:grid;gap:12px;max-width:360px}.lock input{min-height:44px;padding:0 14px;border:1px solid var(--border-strong);border-radius:12px;font:inherit;background:var(--surface-elevated);color:var(--ink)}.lock button{border:0;font:inherit;cursor:pointer;justify-content:center}.lock-err{color:var(--danger);font-size:14px;min-height:20px;margin:0}

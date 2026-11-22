@@ -114,6 +114,11 @@ Il est né du carrousel marketing ([`docs/marketing/carrousel`](marketing/carrou
 - **Mode sombre automatique** (réglage du téléphone), avec `color-scheme` et deux `theme-color` (bleu roi en
   clair, bleu nuit en sombre).
 
+- **Fond inversé** `--inverse` / `--on-inverse` (onglet actif, filtre actif, toast) : encre sur papier en clair,
+  papier sur encre en sombre. `--shadow-rgb` teinte les ombres ; `--ink-rgb` reste la vraie couleur du texte.
+- **Contrastes vérifiés en sombre** (revue du 22 novembre) : texte 15,5:1, texte secondaire 7,9:1, bouton
+  principal 5,2:1, ocre 8,8:1. Les couleurs d'état (erreur, info, avertissement, succès) ont leurs valeurs sombres.
+
 ### Typographie
 
 - **Sora** pour les titres ; en **800** pour les grands (écran vide, titres de fenêtre). **DM Sans** pour le

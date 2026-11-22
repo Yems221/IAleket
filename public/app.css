@@ -123,7 +123,7 @@ body::after {
   display: flex; align-items: center; justify-content: space-between;
   position: sticky; top: 0; z-index: var(--z-sticky);
   /* Liquid glass inner border */
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 3px rgb(var(--ink-rgb) / 0.04);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 3px rgb(var(--shadow-rgb) / 0.04);
 }
 .navbar-brand {
   font-family: var(--font-display);
@@ -156,7 +156,7 @@ body::after {
   transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .space-tab:hover { background: var(--surface-sunken); color: var(--ink); }
-.space-tab.active { background: var(--ink); color: white; font-weight: 600; }
+.space-tab.active { background: var(--inverse); color: var(--on-inverse); font-weight: 600; }
 .space-tab .count { font-size: 10px; opacity: 0.55; margin-left: 3px; }
 .space-tab.active .count { opacity: 1; }
 .space-tab-add {
@@ -208,7 +208,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   min-height: 40px;
 }
 .filter-chip:hover { border-color: var(--border-strong); color: var(--ink); }
-.filter-chip.active { background: var(--ink); color: white; border-color: var(--ink); }
+.filter-chip.active { background: var(--inverse); color: var(--on-inverse); border-color: var(--inverse); }
 
 /* Tag perso : bouton × de retrait, dans la puce */
 .tag-remove {
@@ -218,7 +218,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   font-size: 15px; line-height: 1; opacity: 0.6;
   transition: opacity var(--dur-fast), background var(--dur-fast);
 }
-.tag-remove:hover { opacity: 1; background: rgba(0,0,0,0.12); }
+.tag-remove:hover { opacity: 1; background: var(--surface-sunken); }
 .filter-chip.active .tag-remove:hover { background: rgba(255,255,255,0.22); }
 /* Champ inline de création d'un tag perso */
 .tag-input {
@@ -425,7 +425,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   box-shadow: var(--shadow-dialog);
   animation: fadeUp 0.2s var(--ease-out);
   position: relative;
-  border: 1px solid rgba(0,0,0,0.04);
+  border: 1px solid var(--border-light);
 }
 .modal-close {
   position: absolute; top: 14px; right: 14px;
@@ -520,7 +520,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   box-shadow: var(--shadow-dialog);
   text-align: center;
   animation: popIn 160ms var(--ease-out);
-  border: 1px solid rgba(0,0,0,0.04);
+  border: 1px solid var(--border-light);
 }
 .confirm-dialog p {
   margin-bottom: var(--s-5); font-size: 15px;
@@ -548,7 +548,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
   max-width: 320px; pointer-events: auto;
 }
-.toast-success { background: var(--ink); color: white; }
+.toast-success { background: var(--inverse); color: var(--on-inverse); }
 .toast-error { background: var(--danger); color: white; }
 @starting-style { .toast { opacity: 0; transform: translateY(8px); } }
 
@@ -565,18 +565,18 @@ body.reordering { user-select: none; -webkit-user-select: none; }
   50% { opacity: 0.9; }
   100% { opacity: 0.45; }
 }
-.spinner { /* chargement : les 7 bits du « l » de leket qui s'allument tour à tour */
-  display: inline-grid; grid-template-columns: repeat(7, 5px); gap: 3px; width: auto; height: auto; vertical-align: middle;
-  --bit: var(--accent);
+.spinner { /* chargement : les 7 bits du « l » de leket (1101100) qui respirent */
+  display: inline-block; width: 53px; height: 5px; vertical-align: middle;
+  background: linear-gradient(var(--accent) 0 0) 0px 0 / 5px 5px no-repeat,
+    linear-gradient(var(--accent) 0 0) 8px 0 / 5px 5px no-repeat,
+    linear-gradient(rgb(var(--accent-rgb) / 0.18) 0 0) 16px 0 / 5px 5px no-repeat,
+    linear-gradient(var(--accent) 0 0) 24px 0 / 5px 5px no-repeat,
+    linear-gradient(var(--accent) 0 0) 32px 0 / 5px 5px no-repeat,
+    linear-gradient(rgb(var(--accent-rgb) / 0.18) 0 0) 40px 0 / 5px 5px no-repeat,
+    linear-gradient(rgb(var(--accent-rgb) / 0.18) 0 0) 48px 0 / 5px 5px no-repeat;
+  animation: bits 600ms linear infinite alternate;
 }
-.spinner::before, .spinner::after { content: none; }
-.spinner { background:
-  linear-gradient(var(--bit) 0 0) 0 0 / 5px 5px no-repeat,
-  linear-gradient(var(--bit) 0 0) 8px 0 / 5px 5px no-repeat,
-  linear-gradient(var(--bit) 0 0) 24px 0 / 5px 5px no-repeat,
-  linear-gradient(var(--bit) 0 0) 32px 0 / 5px 5px no-repeat;
-  width: 53px; height: 5px; animation: bits 900ms steps(2, jump-none) infinite alternate; opacity: .9; }
-@keyframes bits { from { opacity: .25; } to { opacity: 1; } }
+@keyframes bits { from { opacity: .35; } to { opacity: 1; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ===== SCROLLBAR ===== */
@@ -657,7 +657,7 @@ body.reordering { user-select: none; -webkit-user-select: none; }
               opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 /* Sélectionné */
-.cat-checks .cat-check:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-hover); font-weight: 600; }
+.cat-checks .cat-check:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .cat-checks .cat-check:has(input:checked) svg { width: 14px; margin-right: 5px; opacity: 1; transform: scale(1); }
 .cat-checks .cat-check:has(input:checked):hover { background: var(--accent-light); }
 /* Focus clavier (le focus porte sur l'input masqué) */
@@ -716,7 +716,6 @@ body.reordering { user-select: none; -webkit-user-select: none; }
 
 /* ===== Mise en page leketia : moderne et épurée (revue emil-design-eng) =====
    Une seule couleur d'accent, du blanc cassé, des traits fins. Moins de cadres, plus d'air. */
-body { background: var(--surface); }
 
 .navbar {
   height: 64px; padding: 0 var(--s-6);
@@ -749,7 +748,7 @@ body { background: var(--surface); }
 /* Filtres : petites pastilles discrètes */
 .toolbar { padding: var(--s-4) var(--s-6) var(--s-2); }
 .filter-chip { min-height: 32px; padding: 6px 12px; font-size: 12px; background: transparent; }
-.filter-chip.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
 .type-more-btn { width: 32px; height: 32px; background: transparent; }
 
 /* Cartes : l'image d'abord, un texte court dessous, un contour d'un pixel au lieu d'une ombre */
@@ -757,10 +756,10 @@ body { background: var(--surface); }
 .masonry { column-gap: var(--s-5); }
 .card {
   margin-bottom: var(--s-5); border-radius: 16px;
-  box-shadow: 0 0 0 1px rgb(var(--ink-rgb) / 0.07);
+  box-shadow: 0 0 0 1px var(--border-light);
 }
 @media (hover: hover) and (pointer: fine) {
-  .card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgb(var(--ink-rgb) / 0.08), 0 12px 28px -12px rgb(var(--ink-rgb) / 0.22); }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px var(--border-strong), 0 12px 28px -12px rgb(var(--shadow-rgb) / 0.22); }
   .card:hover .card-image { transform: scale(1.03); }
 }
 .card-body { padding: var(--s-3) var(--s-4) var(--s-4); }
@@ -768,8 +767,6 @@ body { background: var(--surface); }
 .card-desc { font-size: 13px; color: var(--ink-muted); margin-bottom: var(--s-3); }
 .card-footer { margin-top: 0; }
 .status-pill { padding: 0; background: none; font-size: 11px; font-weight: 500; color: var(--ink-muted); }
-.status-favori { color: var(--accent); }
-.status-favori::before { background: var(--accent); }
 .cat-chip { background: var(--accent-soft); color: var(--accent); text-transform: none; font-size: 11px; letter-spacing: 0; }
 
 /* Bouton d'ajout : le bleu roi de la calebasse, appui franc */
@@ -808,7 +805,8 @@ body { background: var(--surface); }
 .share-hint { margin: -6px 0 var(--s-4); line-height: 1.45; }
 
 /* Guide à étapes : fenêtre blanche, une étape par vue ; le geste à faire est cerclé. */
-.gi { width: min(100%, 480px); max-width: 100%; max-height: 100dvh; margin: auto auto 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+/* Guide d'installation : imite l'interface du téléphone (iOS, Android), donc toujours en clair, hors tokens. */
+.gi { color-scheme: light; width: min(100%, 480px); max-width: 100%; max-height: 100dvh; margin: auto auto 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
   border: 0; border-radius: 20px 20px 0 0; background: #fff; color: #000; }
 .gi::backdrop { background: rgba(0,0,0,0.35); }
 .gi-tete { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
@@ -866,6 +864,7 @@ body { background: var(--surface); }
 .share-tabs { margin: var(--s-2) 0 var(--s-4); }
 .share-pane { display: grid; gap: var(--s-2); min-height: 120px; align-content: start; }
 .share-pane .spinner { justify-self: center; margin: var(--s-6) 0; }
+/* Fond blanc fixe : un QR code se lit mal sur fond sombre. */
 .share-qr { justify-self: center; width: min(100%, 280px, 36dvh); aspect-ratio: 1; background: #fff; border-radius: var(--r); padding: 6px; }
 .share-qr svg { width: 100%; height: 100%; display: block; }
 .share-note { text-align: center; margin: 0; line-height: 1.45; }
@@ -905,13 +904,12 @@ body.selecting .card { cursor: pointer; position: relative; }
 body.selecting .card::after { content: ""; position: absolute; top: 10px; left: 10px; width: 24px; height: 24px; border-radius: 50%;
   border: 2px solid #fff; background: rgba(0,0,0,0.25); box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 3; }
 body.selecting .card.is-selected { outline: 3px solid var(--accent); outline-offset: -3px; }
-body.selecting .card.is-selected::after { background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center/14px no-repeat; }
+body.selecting .card.is-selected::after { background: var(--accent-fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center/14px no-repeat; }
 
 /* Synchro en direct */
 .sync-btn { min-height: 40px; width: 40px; padding: 0; justify-content: center; border-radius: var(--r-full); }
 .sync-btn.is-syncing svg { animation: spin 900ms linear infinite; }
 .sync-btn.is-error { color: var(--danger); }
-@keyframes spin { to { transform: rotate(360deg); } }
 .pull-hint { position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; translate: -50% 0; z-index: 70; padding: 6px 14px;
   font-size: 13px; font-weight: 600; background: var(--surface-elevated); border: 1px solid var(--border-light); border-radius: 999px; box-shadow: var(--shadow-card); }
 @media (prefers-reduced-motion: reduce) { .sync-btn.is-syncing svg { animation-duration: 2.5s; } }

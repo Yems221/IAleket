@@ -470,6 +470,12 @@ const App = (() => {
     resetAddItemForm();
     const pre = (activeSpace !== 'all' && activeSpace !== 'trash') ? [activeSpace] : (s ? [s.id] : []);
     renderCatChecks('addItemCats', pre);
+    refreshInboxButton();
+  }
+  // iPhone, app installée, Drive déjà relié : « Recevoir depuis Safari » relève la boîte d'arrivée du Drive.
+  function refreshInboxButton() {
+    const b = inboxButton();
+    if (b) b.hidden = !(Install.ouverteInstallee() && /^ios/.test(InstallParcours.parcours(navigator.userAgent, navigator.maxTouchPoints || 0)) && Drive.linked());
   }
   function closeAddItem() { document.getElementById('addItemModal').classList.remove('active'); resetAddItemForm(); }
 
@@ -876,7 +882,15 @@ const App = (() => {
     } else board = await ShareCodec.decode(ref.d);
     const what = `« ${board.name} » (${board.links.length} lien${board.links.length > 1 ? 's' : ''})`;
 
-    if (fromSafari && iphoneSafari()) {
+    if (fromSafari && iphoneSafari() && await Drive.available()) {
+      const send = await showConfirm(`Tu es dans Safari, dont le journal est séparé de l'app installée. Envoyer ${what} à ton app ? La page passe par ton Google Drive et t'attendra à la prochaine ouverture de leketia.`, 'Envoyer à mon app');
+      if (send) {
+        try { await Drive.sendToInbox({ ...(ref.pageId ? { pageId: ref.pageId } : { d: ref.d }), name: board.name }); toast('Envoyé : ouvre leketia depuis ton écran d’accueil'); }
+        catch (e) { toast(e.message, 'error'); }
+        return;
+      }
+      if (!(await showConfirm(`Ajouter ${what} au journal de Safari (pas celui de l'app installée) ?`, 'Ajouter ici'))) return;
+    } else if (fromSafari && iphoneSafari()) {
       const copy = await showConfirm(`Tu es dans Safari. Si leketia est installée sur ton écran d'accueil, son journal est séparé : copie le lien, ouvre leketia et touche « Coller le lien » pour y ajouter ${what}.`, 'Copier le lien');
       if (copy) {
         try { await navigator.clipboard.writeText(ref.url); toast('Lien copié : ouvre leketia depuis ton écran d’accueil'); }
@@ -891,6 +905,34 @@ const App = (() => {
     await loadSpaces();
     const space = spaces.find(s => s.name.toLowerCase() === collection.toLowerCase());
     if (space) setSpace(space.id); // on retrouve la page dans l'app, ouverte sur sa collection
+  }
+
+  // Boîte d'arrivée du Drive : pages envoyées depuis Safari (ou un autre appareil du même compte Google).
+  let inboxRun = null;
+  function checkInbox() {
+    if (inboxRun) return inboxRun;
+    inboxRun = (async () => {
+      const got = await Drive.takeInbox().catch(() => []);
+      for (const it of got) {
+        const ref = it.pageId && PAGE_ID.test(it.pageId) ? { pageId: it.pageId } : (it.d ? { d: it.d } : null);
+        if (ref) { try { await importBoard(ref); } catch (e) { toast(e.message, 'error'); } }
+      }
+      return got.length;
+    })().finally(() => { inboxRun = null; });
+    return inboxRun;
+  }
+  window.addEventListener('leketia:drive-token', () => { setTimeout(checkInbox, 0); });
+  const inboxButton = () => document.getElementById('inboxBtn');
+  // Un toucher : l'accès Google (geste requis), puis la boîte est relevée automatiquement.
+  async function receiveInbox(btn) {
+    if (btn) btn.disabled = true;
+    try {
+      await Drive.connect();
+      await new Promise(r => setTimeout(r, 50));
+      const n = await checkInbox();
+      if (!n) toast('Rien en attente dans ton Google Drive');
+    } catch (e) { toast(e.message, 'error'); }
+    finally { if (btn) btn.disabled = false; }
   }
 
   async function handleImportLink() {
@@ -1346,7 +1388,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, restoreLatest, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, restoreLatest, receiveInbox, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

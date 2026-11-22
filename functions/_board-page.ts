@@ -21,7 +21,7 @@ const csp = (nonce: string) => `default-src 'none'; style-src 'unsafe-inline'; i
 export const isIos = (ua: string) => /iPhone|iPad|iPod/.test(ua);
 export function iosBridge(url: string): string {
   return `<div class="bridge"><strong>leketia est installée sur ton écran d'accueil ?</strong>
-<p>Sur iPhone, ce lien s'ouvre dans Safari et pas dans l'app. Pour retrouver cette page dans l'app : copie le lien, ouvre leketia, puis touche <b>Ajouter</b> › <b>Coller le lien</b>.</p>
+<p>Sur iPhone, ce lien s'ouvre dans Safari et pas dans l'app. Touche <b>Ajouter à mon journal leketia</b> puis <b>Envoyer à mon app</b> : la page passe par ton Google Drive et t'attend dans l'app. Sinon, copie le lien et touche <b>Coller le lien</b> dans l'app.</p>
 <button type="button" class="btn primary" id="copyLink" data-url="${escHtml(url)}">Copier le lien</button></div>`;
 }
 

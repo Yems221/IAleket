@@ -51,7 +51,9 @@ const Drive = (() => {
         if (resp.error) { reject(new Error('Accès à Google Drive refusé')); return; }
         if (!String(resp.scope || '').split(' ').includes(scope)) { reject(new Error('Accès à Google Drive refusé')); return; }
         token = { value: resp.access_token, expiresAt: Date.now() + (Number(resp.expires_in) || 3600) * 1000, scope: String(resp.scope || '') };
+        try { localStorage.setItem('leketia:drive-lie', '1'); } catch { /* mémoire indisponible */ }
         resolve(token.value);
+        window.dispatchEvent(new Event('leketia:drive-token')); // l'app en profite pour relever sa boîte d'arrivée
       };
       tokenClient.error_callback = (err) => {
         reject(new Error(err && err.type === 'popup_closed' ? 'Fenêtre Google fermée : rien n’a été envoyé' : 'Connexion à Google impossible'));
@@ -106,6 +108,41 @@ const Drive = (() => {
     return new File([await res.blob()], name || 'leketia.html', { type: 'text/html' });
   }
 
+  // ---- Boîte d'arrivée : le pont Safari → app installée sur iPhone ---------------------------
+  // Sur iPhone, un lien s'ouvre dans Safari, dont la mémoire est séparée de l'app installée. Safari dépose la page
+  // dans le dossier caché du Drive (même compte Google) ; l'app la relève dès qu'elle a accès au Drive.
+  // C'est le « cookie » de la Biennale, mais rangé dans le Drive de l'utilisateur au lieu d'un serveur.
+  const INBOX = /^leketia-inbox-.*\.json$/;
+
+  async function sendToInbox(ref) {
+    if (!(await available())) throw new Error('Google Drive n’est pas configuré sur cette instance');
+    const accessToken = await getToken();
+    const body = new FormData();
+    body.append('metadata', new Blob([JSON.stringify({ name: `leketia-inbox-${Date.now()}.json`, parents: ['appDataFolder'], mimeType: 'application/json' })], { type: 'application/json' }));
+    body.append('file', new Blob([JSON.stringify({ kind: 'leketia-inbox', v: 1, ...ref, at: new Date().toISOString() })], { type: 'application/json' }));
+    await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', accessToken, { method: 'POST', body });
+  }
+
+  // Relève la boîte sans ouvrir de fenêtre Google : seulement si l'accès est déjà donné dans cette session.
+  async function takeInbox() {
+    if (!hasScope(SCOPE)) return [];
+    const accessToken = token.value;
+    const res = await api('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&orderBy=createdTime&pageSize=50&fields=files(id,name)', accessToken);
+    const out = [];
+    for (const f of (res.files || []).filter((x) => INBOX.test(x.name))) {
+      try {
+        const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(f.id)}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        const item = r.ok ? await r.json() : null;
+        if (item && item.kind === 'leketia-inbox') out.push(item);
+      } catch { /* illisible : on le jette quand même */ }
+      await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(f.id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => {});
+    }
+    return out;
+  }
+
+  const linked = () => { try { return localStorage.getItem('leketia:drive-lie') === '1'; } catch { return false; } };
+  const connect = () => getToken();
+
   // ---- Pages publiées : un fichier JSON public, visible dans le Drive de l'auteur -------------
   // Toute personne qui a le lien peut le lire ; leketia.pages.dev/p/<id> l'affiche.
 
@@ -147,5 +184,5 @@ const Drive = (() => {
 
   const canPublishSilently = () => hasScope(SCOPE_PUBLISH);
 
-  return { available, save, list, download, publish, update, unpublish, canPublishSilently };
+  return { available, save, list, download, publish, update, unpublish, canPublishSilently, sendToInbox, takeInbox, linked, connect };
 })();

@@ -4,8 +4,8 @@
    l'attention par écran (bouton principal d'une conversion, rappel, nouveauté). Voir docs/DESIGN.md. */
 :root {
   /* Fonds */
-  --paper: #f2f5fc;               /* fond de page, légèrement bleuté pour aller avec le bleu roi */
-  --paper-rgb: 242 245 252;
+  --paper: #fbf9f4;               /* fond de page : blanc de lait, froissé par app.css */
+  --paper-rgb: 251 249 244;
   --surface: var(--paper);        /* ancien nom, gardé pour les règles existantes */
   --surface-elevated: #ffffff;    /* cartes, fenêtres */
   --surface-sunken: #e9eef9;      /* champs, onglets, survols */

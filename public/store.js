@@ -101,6 +101,7 @@ const Store = (() => {
       if (it.deleted_at && new Date(it.deleted_at.replace(' ', 'T') + 'Z').getTime() < limit) {
         await deleteMediaRef(it.image_url);
         await idbRun('items', 'readwrite', (s) => s.delete(it.id));
+        await addTombstone(it.id);
       }
     }
     const used = new Set(items.map((it) => refId(it.image_url)).filter(Boolean));
@@ -220,6 +221,7 @@ const Store = (() => {
         if (url.searchParams.get('permanent') === '1') {
           await deleteMediaRef(item.image_url);
           await idbRun('items', 'readwrite', (s) => s.delete(item.id));
+          await addTombstone(item.id);
         } else {
           await putItem({ ...item, deleted_at: nowSql(), updated_at: nowSql() });
         }
@@ -357,6 +359,50 @@ const Store = (() => {
 
   const lastBackupAt = () => idbRun('meta', 'readonly', (s) => s.get('lastBackupAt'));
 
+  // ---- Synchronisation entre appareils (voir sync.js et sync-merge.mjs) -------------------------
+  // Une suppression définitive laisse une pierre tombale datée, pour que les autres appareils l'appliquent.
+  const tombstones = async () => (await idbRun('meta', 'readonly', (s) => s.get('tombstones'))) || {};
+  async function addTombstone(id) {
+    const all = await tombstones();
+    all[id] = nowSql();
+    await idbRun('meta', 'readwrite', (s) => s.put(all, 'tombstones'));
+  }
+
+  // État complet du journal, tel qu'il est rangé (les images restent des références media:<id>).
+  async function syncState() {
+    return { spaces: await allSpaces(), items: await allItems(), tombstones: await tombstones() };
+  }
+
+  // Applique un état fusionné, sans prévenir l'app d'une « modification » (ce n'en est pas une : on se met à jour).
+  async function syncApply(merged) {
+    let changed = 0;
+    const localSpaces = new Map((await allSpaces()).map((x) => [x.id, x]));
+    const localItems = new Map((await allItems()).map((x) => [x.id, x]));
+    const keepSpaces = new Set(merged.spaces.map((x) => x.id));
+    const keepItems = new Set(merged.items.map((x) => x.id));
+    for (const sp of merged.spaces) {
+      if (JSON.stringify(localSpaces.get(sp.id)) !== JSON.stringify(sp)) { await idbRun('spaces', 'readwrite', (st) => st.put(sp)); changed++; }
+    }
+    for (const id of localSpaces.keys()) if (!keepSpaces.has(id)) { await idbRun('spaces', 'readwrite', (st) => st.delete(id)); changed++; }
+    for (const it of merged.items) {
+      const before = localItems.get(it.id);
+      if (JSON.stringify(before) !== JSON.stringify(it)) {
+        if (before && before.image_url && before.image_url !== it.image_url) await deleteMediaRef(before.image_url);
+        await putItem(it); changed++;
+      }
+    }
+    for (const [id, it] of localItems) {
+      if (!keepItems.has(id)) { await deleteMediaRef(it.image_url); await idbRun('items', 'readwrite', (st) => st.delete(id)); changed++; }
+    }
+    await idbRun('meta', 'readwrite', (s) => s.put(merged.tombstones || {}, 'tombstones'));
+    return changed;
+  }
+
+  const mediaRecord = (id) => idbRun('media', 'readonly', (s) => s.get(id));
+  const putMediaRecord = (rec) => idbRun('media', 'readwrite', (s) => s.put(rec));
+  const syncMeta = async () => (await idbRun('meta', 'readonly', (s) => s.get('sync'))) || {};
+  const setSyncMeta = (v) => idbRun('meta', 'readwrite', (s) => s.put(v, 'sync'));
+
   // Prévenir l'app quand le journal change (ex. pour mettre à jour une page publiée).
   const changed = () => window.dispatchEvent(new Event('leketia:changed'));
   const notifying = (fn) => async (...args) => { const out = await fn(...args); changed(); return out; };
@@ -370,5 +416,5 @@ const Store = (() => {
   const publications = async () => (await idbRun('meta', 'readonly', (s) => s.get('publications'))) || {};
   const savePublications = (all) => idbRun('meta', 'readwrite', (s) => s.put(all, 'publications'));
 
-  return { api: apiNotifying, saveMedia, urlForMedia, kindOf, housekeeping, exportFile, importFile: notifying(importFile), importShared: notifying(importShared), lastBackupAt, safeLink, publications, savePublications };
+  return { api: apiNotifying, saveMedia, urlForMedia, kindOf, housekeeping, exportFile, importFile: notifying(importFile), importShared: notifying(importShared), lastBackupAt, safeLink, publications, savePublications, syncState, syncApply, mediaRecord, putMediaRecord, syncMeta, setSyncMeta, refId };
 })();

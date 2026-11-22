@@ -40,6 +40,7 @@ const App = (() => {
       refreshBackupHint();
       await whenShareCodec();
       handleImportLink();
+      Sync.start(); // sans fenêtre : ne fait rien tant que la synchronisation n'est pas activée sur cet appareil
     } catch (e) {
       document.getElementById('grid').innerHTML = '';
       toast('Le stockage de ce navigateur est indisponible (navigation privée ?)', 'error');
@@ -50,11 +51,13 @@ const App = (() => {
   // Journal entièrement vide (nouvel appareil, app réinstallée, mémoire effacée) : on propose la sauvegarde Drive.
   let journalEmpty = false;
   let driveReady = false;
+  let syncReady = false;
   async function loadSpaces() {
     const data = await api('/api/spaces');
     spaces = data.spaces || [];
     journalEmpty = !spaces.some(s => s.item_count > 0) && !(await api('/api/items?trash=1')).items.length;
     if (journalEmpty && !driveReady) driveReady = await Drive.available();
+    syncReady = journalEmpty && driveReady && (await Drive.syncSupported()) && !(await Drive.syncLinked());
     renderSpacesTabs();
     await loadItems();
     await handleSharedIntent(); // partage reçu d'une autre appli → fenêtre d'ajout pré-remplie (une fois)
@@ -399,6 +402,9 @@ const App = (() => {
     if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${mark}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
     const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
     const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';
+    if (!filtered && journalEmpty && syncReady) {
+      return `<div class="empty-state"><div class="illustration">${mark}</div><h3>Ton journal est vide</h3><p>Tu utilises leketia sur un autre appareil ? Connecte le même compte Google : ton journal arrive ici et reste à jour tout seul.</p><div class="empty-actions"><button class="btn btn-primary" onclick="App.syncConnect(this)">Synchroniser mes appareils</button><button class="btn btn-ghost" onclick="App.showAddItem()">Commencer un nouveau journal</button><button class="btn btn-ghost" onclick="App.showBackup()">Restaurer depuis un fichier</button></div></div>`;
+    }
     if (!filtered && journalEmpty && driveReady) {
       return `<div class="empty-state"><div class="illustration">${mark}</div><h3>Ton journal est vide</h3><p>Tu avais sauvegardé ton journal dans Google Drive ? Récupère la dernière sauvegarde en un toucher.</p><div class="empty-actions"><button class="btn btn-primary" onclick="App.restoreLatest(this)">Restaurer depuis Google Drive</button><button class="btn btn-ghost" onclick="App.showAddItem()">Commencer un nouveau journal</button><button class="btn btn-ghost" onclick="App.showBackup()">Restaurer depuis un fichier</button></div></div>`;
     }
@@ -830,7 +836,7 @@ const App = (() => {
     const board = await boardFor(scope === 'all' ? null : scope, { thumbs: true });
     const hash = await ShareCodec.pageHash(board);
     if (hash === pub.hash) return;
-    if (!interactive && !Drive.canPublishSilently()) return; // mise à jour au prochain passage dans Partager › Publier
+    if (!interactive && !(await Drive.canPublishSilently())) return; // mise à jour au prochain passage dans Partager › Publier
     try { await Drive.update(pub.fileId, ShareCodec.toPage(board)); }
     catch (e) {
       if (e.status === 404) { delete all[scope]; await Store.savePublications(all); throw new Error('Le fichier de la page a été supprimé du Drive : la page n’est plus publiée'); }
@@ -955,7 +961,7 @@ const App = (() => {
     const last = await Store.lastBackupAt();
     const total = spaces.reduce((n, s) => n + (s.item_count || 0), 0);
     const days = last ? Math.floor((Date.now() - last) / 86400000) : null;
-    const stale = total > 0 && (days === null || days >= BACKUP_STALE_DAYS);
+    const stale = total > 0 && (days === null || days >= BACKUP_STALE_DAYS) && !(await Drive.syncLinked().catch(() => false));
     document.getElementById('backupBtn').classList.toggle('needs-backup', stale);
     const status = document.getElementById('backupStatus');
     status.classList.toggle('is-stale', stale);
@@ -964,6 +970,58 @@ const App = (() => {
       : `Dernière sauvegarde : il y a ${days} jour${days > 1 ? 's' : ''}.`;
   }
   // Le bouton Drive n'apparaît que si l'instance a son identifiant Google ; il passe alors en premier.
+  // ===== Synchronisation entre appareils =====
+  async function refreshSyncZone() {
+    const supported = await Drive.syncSupported();
+    const linked = supported && await Drive.syncLinked();
+    document.getElementById('syncZone').hidden = !supported;
+    document.getElementById('syncOn').hidden = linked;
+    document.getElementById('syncNow').hidden = !linked;
+    document.getElementById('syncOff').hidden = !linked;
+    document.getElementById('syncHint').hidden = linked;
+    const st = Sync.state();
+    const line = document.getElementById('syncLine');
+    line.textContent = !linked ? 'Synchronisation désactivée sur cet appareil.'
+      : st.status === 'syncing' ? 'Synchronisation en cours…'
+      : st.status === 'error' ? `Synchronisation en échec : ${st.error}`
+      : st.at ? `Synchronisé ${new Date(st.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}. Tes autres appareils récupèrent tes ajouts à l'ouverture, puis toutes les 30 secondes.`
+      : 'Synchronisation activée.';
+    line.classList.toggle('is-on', linked && st.status !== 'error');
+    return linked;
+  }
+  window.addEventListener('leketia:sync-state', () => { if (document.getElementById('backupModal').classList.contains('active')) refreshSyncZone(); });
+  // Un autre appareil a ajouté ou modifié : on réaffiche, sans changer de collection.
+  window.addEventListener('leketia:synced', async (e) => {
+    await loadSpaces();
+    if (activeSpace !== 'all' && activeSpace !== 'trash' && !spaces.some(sp => sp.id === activeSpace)) setSpace('all');
+    const n = e.detail && e.detail.applied;
+    if (n) toast(`Journal mis à jour depuis tes autres appareils`);
+  });
+  async function syncConnect(btn) {
+    if (btn) btn.disabled = true;
+    try {
+      await Drive.connect();
+      if (!(await Drive.syncLinked())) throw new Error('Google n’a pas donné d’accès durable : retire leketia de ton compte Google (Sécurité › Applications tierces), puis réessaie');
+      await refreshSyncZone();
+      const r = await Sync.run();
+      if (r && r.error) throw new Error(Sync.state().error);
+      toast('Synchronisation activée sur cet appareil');
+    } catch (e) { toast(e.message, 'error'); }
+    finally { if (btn) btn.disabled = false; refreshSyncZone(); }
+  }
+  async function syncNow(btn) {
+    if (btn) btn.disabled = true;
+    await Sync.run();
+    if (btn) btn.disabled = false;
+    refreshSyncZone();
+  }
+  async function syncDisconnect() {
+    if (!(await showConfirm('Arrêter la synchronisation sur cet appareil ? Ton journal reste ici et dans ton Google Drive ; les autres appareils continuent.', 'Arrêter'))) return;
+    await Drive.disconnect();
+    toast('Synchronisation arrêtée sur cet appareil');
+    refreshSyncZone();
+  }
+
   async function refreshDriveButton() {
     const on = await Drive.available();
     document.getElementById('driveZone').hidden = !on;
@@ -974,6 +1032,7 @@ const App = (() => {
   }
   function showBackup() {
     refreshDriveButton();
+    refreshSyncZone();
     const sel = document.getElementById('backupScope');
     sel.replaceChildren(new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id)));
     // Le choix n'a de sens qu'avec plusieurs collections.
@@ -1392,7 +1451,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, restoreLatest, receiveInbox, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

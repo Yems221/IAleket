@@ -5,20 +5,23 @@
 // Le jeton reste en mémoire : il n'est jamais écrit sur l'appareil.
 const Drive = (() => {
   const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-  // Publier une page : accès aux seuls fichiers créés par leketia (drive.file, non sensible), demandé au premier « Publier ».
+  // Publier une page : accès aux seuls fichiers créés par leketia (drive.file, non sensible).
   const SCOPE_PUBLISH = 'https://www.googleapis.com/auth/drive.file';
   const KEEP = 10; // sauvegardes gardées ; chacune contient tout le journal, la plus récente suffit pour tout restaurer
   let clientId = null;   // identifiant Google de cette instance (public, pas un secret)
+  let syncCapable = false; // l'instance sait faire durer l'accès (secret configuré côté serveur)
   let gisReady = null;   // chargement de la bibliothèque Google, une seule fois
   let tokenClient = null;
-  let token = null;      // { value, expiresAt, scope }
+  let token = null;      // { value, expiresAt, scope } — en mémoire seulement
 
   // L'identifiant est propre à chaque instance : il vient de sa configuration serveur.
   async function available() {
     if (clientId !== null) return !!clientId;
     try {
       const res = await fetch('/config.json', { cache: 'no-store' });
-      clientId = res.ok ? (await res.json()).googleClientId || '' : '';
+      const cfg = res.ok ? await res.json() : {};
+      clientId = cfg.googleClientId || '';
+      syncCapable = !!cfg.googleSync;
     } catch { clientId = ''; }
     if (clientId) loadGis(); // charger tôt : la fenêtre Google doit s'ouvrir dans le geste du toucher
     return !!clientId;
@@ -38,33 +41,92 @@ const Drive = (() => {
     return gisReady;
   }
 
-  // Demande un jeton à Google : une fenêtre s'ouvre au premier usage, puis plus rien tant qu'il est valide.
+  // ---- Accès qui dure : le jeton longue durée reste sur cet appareil ------------------------------
+  // À chaque ouverture, le serveur (sans mémoire) l'échange contre un accès d'une heure : aucune fenêtre.
+  const readRefresh = () => idbRun('meta', 'readonly', (st) => st.get('googleRefresh')).catch(() => null);
+  const writeRefresh = (v) => idbRun('meta', 'readwrite', (st) => (v ? st.put(v, 'googleRefresh') : st.delete('googleRefresh')));
+
   const hasScope = (scope) => !!token && Date.now() < token.expiresAt - 60000 && token.scope.split(' ').includes(scope);
+  function setToken(d) {
+    token = { value: d.access_token, expiresAt: Date.now() + (Number(d.expires_in) || 3600) * 1000, scope: String(d.scope || '') };
+    try { localStorage.setItem('leketia:drive-lie', '1'); } catch { /* mémoire indisponible */ }
+    setTimeout(() => window.dispatchEvent(new Event('leketia:drive-token')), 0); // l'app relève sa boîte d'arrivée
+  }
+
+  // Sans fenêtre : jeton en mémoire, sinon échange du jeton longue durée. null si impossible.
+  async function silentToken(scope = SCOPE) {
+    if (hasScope(scope)) return token.value;
+    if (!(await available()) || !syncCapable) return null;
+    const refresh_token = await readRefresh();
+    if (!refresh_token) return null;
+    const res = await fetch('/api/google/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token }) });
+    if (res.status === 401) { await writeRefresh(null); return null; } // accès retiré depuis le compte Google
+    if (!res.ok) return null;
+    setToken(await res.json());
+    return hasScope(scope) ? token.value : null;
+  }
+
+  // Avec fenêtre Google (à appeler dans le geste d'un toucher).
+  function codeLogin() {
+    return loadGis().then(() => new Promise((resolve, reject) => {
+      const client = google.accounts.oauth2.initCodeClient({
+        client_id: clientId, scope: `${SCOPE} ${SCOPE_PUBLISH}`, ux_mode: 'popup', include_granted_scopes: true,
+        callback: async (resp) => {
+          if (resp.error || !resp.code) { reject(new Error('Accès à Google Drive refusé')); return; }
+          try {
+            const res = await fetch('/api/google/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: resp.code }) });
+            const d = await res.json();
+            if (!res.ok || !d.access_token) throw new Error(d.error || 'Connexion à Google impossible');
+            if (d.refresh_token) await writeRefresh(d.refresh_token);
+            setToken(d);
+            resolve(token.value);
+          } catch (e) { reject(e); }
+        },
+        error_callback: (err) => reject(new Error(err && err.type === 'popup_closed' ? 'Fenêtre Google fermée : rien n’a été envoyé' : 'Connexion à Google impossible')),
+      });
+      client.requestCode();
+    }));
+  }
+
+  // Instance sans secret : accès d'une heure, redemandé à chaque ouverture (ancien fonctionnement).
+  function tokenLogin(scope) {
+    return loadGis().then(() => new Promise((resolve, reject) => {
+      if (!tokenClient) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: SCOPE, callback: () => {} });
+      tokenClient.callback = (resp) => {
+        if (resp.error || !String(resp.scope || '').split(' ').includes(scope)) { reject(new Error('Accès à Google Drive refusé')); return; }
+        setToken(resp);
+        resolve(token.value);
+      };
+      tokenClient.error_callback = (err) => reject(new Error(err && err.type === 'popup_closed' ? 'Fenêtre Google fermée : rien n’a été envoyé' : 'Connexion à Google impossible'));
+      tokenClient.requestAccessToken({ prompt: '', scope, include_granted_scopes: true });
+    }));
+  }
+
   async function getToken(scope = SCOPE) {
     if (hasScope(scope)) return token.value;
-    await loadGis();
-    return new Promise((resolve, reject) => {
-      if (!tokenClient) {
-        tokenClient = google.accounts.oauth2.initTokenClient({ client_id: clientId, scope: SCOPE, callback: () => {} });
-      }
-      tokenClient.callback = (resp) => {
-        if (resp.error) { reject(new Error('Accès à Google Drive refusé')); return; }
-        if (!String(resp.scope || '').split(' ').includes(scope)) { reject(new Error('Accès à Google Drive refusé')); return; }
-        token = { value: resp.access_token, expiresAt: Date.now() + (Number(resp.expires_in) || 3600) * 1000, scope: String(resp.scope || '') };
-        try { localStorage.setItem('leketia:drive-lie', '1'); } catch { /* mémoire indisponible */ }
-        resolve(token.value);
-        window.dispatchEvent(new Event('leketia:drive-token')); // l'app en profite pour relever sa boîte d'arrivée
-      };
-      tokenClient.error_callback = (err) => {
-        reject(new Error(err && err.type === 'popup_closed' ? 'Fenêtre Google fermée : rien n’a été envoyé' : 'Connexion à Google impossible'));
-      };
-      tokenClient.requestAccessToken({ prompt: '', scope, include_granted_scopes: true });
-    });
+    if (syncCapable && (await readRefresh())) { const t = await silentToken(scope).catch(() => null); if (t) return t; }
+    if (!(await available())) throw new Error('Google Drive n’est pas configuré sur cette instance');
+    if (syncCapable) { await codeLogin(); if (hasScope(scope)) return token.value; throw new Error('Accès à Google Drive refusé'); }
+    return tokenLogin(scope);
+  }
+
+  // Synchronisation possible sans fenêtre sur cet appareil ?
+  const syncSupported = async () => (await available()) && syncCapable;
+  const syncLinked = async () => (await syncSupported()) && !!(await readRefresh());
+
+  // Couper l'accès : le jeton longue durée est révoqué chez Google et oublié ici.
+  async function disconnect() {
+    const rt = await readRefresh();
+    const t = rt || (token && token.value);
+    if (t) await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(t)}`, { method: 'POST' }).catch(() => {});
+    await writeRefresh(null);
+    token = null;
+    try { localStorage.removeItem('leketia:drive-lie'); } catch { /* rien */ }
   }
 
   async function api(url, accessToken, options = {}) {
     const res = await fetch(url, { ...options, headers: { Authorization: `Bearer ${accessToken}`, ...(options.headers || {}) } });
-    if (res.status === 401) { token = null; throw new Error('Session Google expirée : réessaie'); }
+    if (res.status === 401) { token = null; throw Object.assign(new Error('Session Google expirée : réessaie'), { status: 401 }); }
     if (res.status === 404) throw Object.assign(new Error('Fichier introuvable dans Google Drive'), { status: 404 });
     if (!res.ok) throw new Error(`Google Drive a refusé l’envoi (${res.status})`);
     return res.status === 204 ? null : res.json();
@@ -182,7 +244,7 @@ const Drive = (() => {
     catch (e) { if (e.status !== 404) throw e; } // déjà supprimé à la main : c'est retiré
   }
 
-  const canPublishSilently = () => hasScope(SCOPE_PUBLISH);
+  const canPublishSilently = async () => !!(await silentToken(SCOPE_PUBLISH).catch(() => null));
 
-  return { available, save, list, download, publish, update, unpublish, canPublishSilently, sendToInbox, takeInbox, linked, connect };
+  return { available, save, list, download, publish, update, unpublish, canPublishSilently, sendToInbox, takeInbox, linked, connect, silentToken, syncSupported, syncLinked, disconnect, api };
 })();

@@ -925,3 +925,11 @@ body { background: var(--surface); }
 .share-danger { color: var(--danger); }
 @media (hover: hover) and (pointer: fine) { .btn-ghost.share-danger:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); } }
 .share-tabs .modal-tab { min-height: 44px; padding: 8px 4px; white-space: nowrap; }
+
+/* Synchronisation entre appareils */
+.sync-zone { display: grid; gap: var(--s-2); margin-bottom: var(--s-4); padding-bottom: var(--s-4); border-bottom: 1px solid var(--border-light); }
+.sync-line { margin: 0; font-size: 14px; color: var(--ink-secondary); line-height: 1.45; }
+.sync-line.is-on { color: var(--ink); }
+.sync-line.is-on::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #16a34a; margin-right: 8px; vertical-align: 1px; }
+.sync-zone .btn { min-height: 44px; justify-content: center; }
+.sync-off { color: var(--ink-secondary); }

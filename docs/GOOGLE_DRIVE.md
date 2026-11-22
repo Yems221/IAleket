@@ -27,7 +27,11 @@ Dans la [console Google Cloud](https://console.cloud.google.com/), avec le compt
    - nom de l'app, adresse e-mail d'assistance, logo facultatif ;
    - accès (scopes) : ajouter `.../auth/drive.file` ;
    - **Public :** en mode « Test », ajouter les adresses Gmail autorisées (100 au maximum). Pour une
-     instance ouverte à tous, publier l'app (« En production »).
+     instance ouverte à tous, publier l'app (« En production ») : renseigner d'abord la page d'accueil et
+     la page de confidentialité (`/confidentialite`) dans « Branding ». Ne pas importer de logo : un logo
+     déclenche une validation de marque par Google ; sans logo et avec `drive.file` seul, aucune
+     validation n'est demandée.
+   - La liste des utilisateurs de test peut mettre plusieurs minutes à s'afficher après l'ajout.
 4. **API et services → Identifiants → Créer des identifiants → ID client OAuth :**
    - type **Application Web** ;
    - **Origines JavaScript autorisées :** l'adresse de l'instance, par exemple `https://leketia.pages.dev`

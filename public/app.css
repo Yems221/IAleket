@@ -23,20 +23,19 @@ body {
   position: relative;
 }
 
-/* Papier froissé, en pur CSS : un relief tiré d'un bruit fractal (SVG feTurbulence) éclairé de biais
-   (feDiffuseLighting), posé derrière tout le contenu et fondu dans la couleur du papier. Image calculée une fois. */
+/* Papier froissé : une texture de facettes et de plis (public/brand/paper-crumple.webp, générée par
+   tools/paper/crumple.py d'après de vraies photos), posée derrière tout le contenu et fondue dans le papier. */
 body::before {
   content: '';
   position: fixed; inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='p' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0065 0.0095' numOctaves='5' seed='11' stitchTiles='stitch' result='n'/%3E%3CfeDiffuseLighting in='n' lighting-color='%23ffffff' surfaceScale='3.4' diffuseConstant='1.2'%3E%3CfeDistantLight azimuth='225' elevation='55'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
-  background-size: 900px 900px;
+  background: url("/brand/paper-crumple.webp") 0 0 / 1024px 1024px repeat;
   mix-blend-mode: multiply;
-  opacity: var(--paper-crumple, 0.85);
+  opacity: var(--paper-crumple, 1);
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body::before { mix-blend-mode: soft-light; opacity: 0.55; } }
-:root[data-theme="dark"] body::before { mix-blend-mode: soft-light; opacity: 0.55; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body::before { mix-blend-mode: soft-light; opacity: 0.9; } }
+:root[data-theme="dark"] body::before { mix-blend-mode: soft-light; opacity: 0.9; }
 
 /* Keyboard focus ring (UI/UX Pro Max §1) */
 :focus-visible {

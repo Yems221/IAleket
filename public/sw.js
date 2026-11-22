@@ -23,6 +23,7 @@ const STATIC_ASSETS = [
   '/board-view.mjs',
   '/vendor/qrcode.js',
   '/manifest.webmanifest',
+  '/brand/paper-crumple.webp',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',

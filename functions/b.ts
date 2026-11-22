@@ -3,7 +3,7 @@
 // ni base, ni fichier, ni journal. Lisible par un humain (page HTML) et par un agent IA
 // (même page en texte, ou en Markdown avec ?format=md ou l'en-tête Accept: text/markdown).
 import { decode, toMarkdown } from '../public/share-codec.mjs';
-import { htmlPage, boardCards, countLabel, escHtml, PAGE_HEADERS } from './_board-page';
+import { htmlPage, boardCards, countLabel, escHtml, PAGE_HEADERS, isIos, iosBridge } from './_board-page';
 
 export async function onRequestGet(context: { request: Request }): Promise<Response> {
   const url = new URL(context.request.url);
@@ -30,7 +30,7 @@ export async function onRequestGet(context: { request: Request }): Promise<Respo
     extraHead: `<link rel="alternate" type="text/markdown" href="${escHtml(mdUrl)}">`,
     body: `<h1>${escHtml(board.name)}</h1>
 <p class="meta">${countLabel(n)}${board.date ? `, partagé le ${escHtml(board.date)}` : ''}. Ce partage n'est stocké nulle part : tout son contenu est dans le lien.</p>
-<div class="actions"><a class="btn primary" href="/?import=${encodeURIComponent(d)}">Ajouter à mon journal leketia</a><a class="btn ghost" href="${escHtml(mdUrl)}">Version texte (Markdown)</a></div>
+${isIos(context.request.headers.get('User-Agent') || '') ? iosBridge(`${url.origin}/b?d=${d}`) : ''}<div class="actions"><a class="btn primary" href="/?import=${encodeURIComponent(d)}">Ajouter à mon journal leketia</a><a class="btn ghost" href="${escHtml(mdUrl)}">Version texte (Markdown)</a></div>
 ${boardCards(board)}`,
   });
 }

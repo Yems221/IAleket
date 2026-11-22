@@ -14,7 +14,16 @@ export const PAGE_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
 };
 
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const csp = (nonce: string) => `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+
+/** Sur iPhone, un lien s'ouvre toujours dans Safari, jamais dans l'app installée, dont la mémoire est séparée.
+ * Le pont sans serveur : copier le lien ici, puis « Coller le lien » dans l'app, qui reconnaît une page leketia. */
+export const isIos = (ua: string) => /iPhone|iPad|iPod/.test(ua);
+export function iosBridge(url: string): string {
+  return `<div class="bridge"><strong>leketia est installée sur ton écran d'accueil ?</strong>
+<p>Sur iPhone, ce lien s'ouvre dans Safari et pas dans l'app. Pour retrouver cette page dans l'app : copie le lien, ouvre leketia, puis touche <b>Ajouter</b> › <b>Coller le lien</b>.</p>
+<button type="button" class="btn primary" id="copyLink" data-url="${escHtml(url)}">Copier le lien</button></div>`;
+}
 
 // Miniature YouTube déduite de l'adresse : aucune image n'est stockée nulle part.
 function youtubeId(raw: string): string {
@@ -32,6 +41,8 @@ const domain = (raw: string) => { try { return new URL(raw).hostname.replace(/^w
 
 export function htmlPage(opts: { title: string; description: string; origin: string; canonical?: string; body: string; status?: number; extraHead?: string; cache?: string }): Response {
   const { title, description, origin, canonical, body, status = 200, extraHead = '', cache = 'no-store' } = opts;
+  const nonce = crypto.randomUUID().replace(/-/g, '');
+  const script = body.includes('id="copyLink"') ? `<script nonce="${nonce}">document.getElementById('copyLink').addEventListener('click',async function(){try{await navigator.clipboard.writeText(this.dataset.url);this.textContent='Lien copié : ouvre leketia';}catch(e){this.textContent='Copie impossible : copie l’adresse de la page';}});</script>` : '';
   const t = escHtml(title);
   const d = escHtml(description);
   return new Response(`<!doctype html><html lang="fr"><head><meta charset="utf-8">
@@ -56,8 +67,9 @@ h1{font-size:26px;line-height:1.2;margin:0 0 4px;overflow-wrap:anywhere}.meta{co
 .card div{min-width:0}.card a{color:var(--ink);font-weight:600;text-decoration:none;overflow-wrap:anywhere}.card a:hover{color:var(--blue)}
 .dom{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}.note{margin:4px 0 0;color:var(--muted);font-size:14px;overflow-wrap:anywhere}
 @media (max-width:480px){.card img{width:96px}}
-</style></head><body><main><header><img src="/brand/leketia-mark.webp" alt="" width="40" height="40"><a href="/">leketia</a></header>${body}</main></body></html>`,
-    { status, headers: { ...PAGE_HEADERS, 'Cache-Control': cache, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP } });
+.bridge{background:#eef2fd;border:1px solid #c9d5f7;border-radius:16px;padding:14px 16px;margin:0 0 20px}.bridge p{margin:6px 0 12px;font-size:14px}.bridge button{border:0;font:inherit;cursor:pointer}
+</style></head><body><main><header><img src="/brand/leketia-mark.webp" alt="" width="40" height="40"><a href="/">leketia</a></header>${body}</main>${script}</body></html>`,
+    { status, headers: { ...PAGE_HEADERS, Vary: 'User-Agent', 'Cache-Control': cache, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp(nonce) } });
 }
 
 /** Les cartes du board, déjà écrites dans la page. */

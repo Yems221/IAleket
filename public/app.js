@@ -47,9 +47,14 @@ const App = (() => {
   }
 
   // ===== Spaces =====
+  // Journal entièrement vide (nouvel appareil, app réinstallée, mémoire effacée) : on propose la sauvegarde Drive.
+  let journalEmpty = false;
+  let driveReady = false;
   async function loadSpaces() {
     const data = await api('/api/spaces');
     spaces = data.spaces || [];
+    journalEmpty = !spaces.some(s => s.item_count > 0) && !(await api('/api/items?trash=1')).items.length;
+    if (journalEmpty && !driveReady) driveReady = await Drive.available();
     renderSpacesTabs();
     await loadItems();
     await handleSharedIntent(); // partage reçu d'une autre appli → fenêtre d'ajout pré-remplie (une fois)
@@ -394,6 +399,9 @@ const App = (() => {
     if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${mark}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
     const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
     const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';
+    if (!filtered && journalEmpty && driveReady) {
+      return `<div class="empty-state"><div class="illustration">${mark}</div><h3>Ton journal est vide</h3><p>Tu avais sauvegardé ton journal dans Google Drive ? Récupère la dernière sauvegarde en un toucher.</p><button class="btn btn-primary" onclick="App.restoreLatest(this)">Restaurer depuis Google Drive</button><button class="btn btn-ghost empty-restore" onclick="App.showAddItem()">Commencer un nouveau journal</button><button class="btn btn-ghost empty-restore" onclick="App.showBackup()">Restaurer depuis un fichier</button></div>`;
+    }
     const restore = filtered ? '' : '<button class="btn btn-ghost empty-restore" onclick="App.showBackup()">Retrouver mon journal (Google Drive ou fichier)</button>';
     return `<div class="empty-state"><div class="illustration">${mark}</div><h3>${heading}</h3><p>${hint}</p><button class="btn btn-primary" onclick="App.showAddItem()">Ajouter un lien</button>${restore}</div>`;
   }
@@ -541,6 +549,8 @@ const App = (() => {
   async function fetchLinkPreview() {
     const url = document.getElementById('linkUrl').value.trim();
     if (!url) return;
+    const boardRef = leketiaBoardRef(url); // une page leketia collée dans le champ : on l'importe au lieu d'en faire un lien
+    if (boardRef) { closeAddItem(); try { await importBoard(boardRef); } catch (e) { toast(e.message, 'error'); } return; }
     // Annule un éventuel auto-fetch en attente pour éviter un double POST identique
     if (_linkDebounce) { clearTimeout(_linkDebounce); _linkDebounce = null; }
     lastAutoFetched = /^https?:\/\//i.test(url) ? url : 'https://' + url;
@@ -640,6 +650,8 @@ const App = (() => {
       const m = clip.match(/https?:\/\/\S+/);
       const url = Store.safeLink(m ? m[0] : clip);
       if (!url) { toast('Le presse-papiers ne contient pas de lien', 'error'); return; }
+      const ref = leketiaBoardRef(url);
+      if (ref) { closeAddItem(); try { await importBoard(ref); } catch (e) { toast(e.message, 'error'); } return; } // page leketia : on l'importe
       document.getElementById('linkUrl').value = url;
       fetchLinkPreview();
     } catch { toast('Lecture du presse-papiers refusée : colle le lien dans le champ', 'error'); }
@@ -835,26 +847,60 @@ const App = (() => {
   });
 
   // Board reçu par un QR ou un lien (/?import=…) : on montre ce qu'il contient, la personne décide.
+  // Sur iPhone, un lien s'ouvre toujours dans Safari, dont la mémoire est séparée de l'app installée :
+  // on propose alors de copier le lien et de le coller dans l'app, plutôt que de l'ajouter au journal de Safari.
+  const PAGE_ID = /^[A-Za-z0-9_-]{20,100}$/;
+  const iphoneSafari = () => /^ios/.test(InstallParcours.parcours(navigator.userAgent, navigator.maxTouchPoints || 0)) && !Install.ouverteInstallee();
+
+  // Adresse d'un board leketia (/b?d=… ou /p/<id>) → de quoi l'importer, sinon null.
+  function leketiaBoardRef(raw) {
+    try {
+      const u = new URL(raw, location.origin);
+      if (u.origin !== location.origin) return null;
+      if (u.pathname === '/b' && u.searchParams.get('d')) return { d: u.searchParams.get('d'), url: u.href };
+      const m = u.pathname.match(/^\/p\/([A-Za-z0-9_-]{20,100})$/);
+      if (m) return { pageId: m[1], url: u.href };
+      if (u.pathname === '/' && u.searchParams.get('import')) return { d: u.searchParams.get('import'), url: `${u.origin}/b?d=${u.searchParams.get('import')}` };
+      if (u.pathname === '/' && PAGE_ID.test(u.searchParams.get('import_page') || '')) return { pageId: u.searchParams.get('import_page'), url: `${u.origin}/p/${u.searchParams.get('import_page')}` };
+    } catch { /* pas une adresse */ }
+    return null;
+  }
+
+  async function importBoard(ref, { fromSafari = false } = {}) {
+    let board;
+    if (ref.pageId) {
+      if (!PAGE_ID.test(ref.pageId)) throw new Error('Lien de page invalide');
+      const res = await fetch(`/p/${ref.pageId}?format=json`);
+      if (!res.ok) throw new Error('Cette page n’est plus publiée');
+      board = await res.json();
+    } else board = await ShareCodec.decode(ref.d);
+    const what = `« ${board.name} » (${board.links.length} lien${board.links.length > 1 ? 's' : ''})`;
+
+    if (fromSafari && iphoneSafari()) {
+      const copy = await showConfirm(`Tu es dans Safari. Si leketia est installée sur ton écran d'accueil, son journal est séparé : copie le lien, ouvre leketia et touche « Coller le lien » pour y ajouter ${what}.`, 'Copier le lien');
+      if (copy) {
+        try { await navigator.clipboard.writeText(ref.url); toast('Lien copié : ouvre leketia depuis ton écran d’accueil'); }
+        catch { toast('Copie impossible : copie l’adresse de la page', 'error'); }
+        return;
+      }
+      if (!(await showConfirm(`Ajouter ${what} au journal de Safari (pas celui de l'app installée) ?`, 'Ajouter ici'))) return;
+    } else if (!(await showConfirm(`Ajouter ${what} à ton journal ?`, 'Ajouter'))) return;
+
+    const { added, skipped, collection } = await Store.importShared(board);
+    toast(`${added} ajouté${added > 1 ? 's' : ''} dans « ${collection} »${skipped ? `, ${skipped} déjà présent${skipped > 1 ? 's' : ''}` : ''}`);
+    await loadSpaces();
+    const space = spaces.find(s => s.name.toLowerCase() === collection.toLowerCase());
+    if (space) setSpace(space.id); // on retrouve la page dans l'app, ouverte sur sa collection
+  }
+
   async function handleImportLink() {
     const params = new URLSearchParams(location.search);
     const d = params.get('import');
     const pageId = params.get('import_page');
     if (!d && !pageId) return;
+    const ref = pageId ? { pageId, url: `${location.origin}/p/${pageId}` } : { d, url: `${location.origin}/b?d=${d}` };
     history.replaceState({}, '', '/');
-    try {
-      let board;
-      if (pageId) {
-        if (!/^[A-Za-z0-9_-]{20,100}$/.test(pageId)) throw new Error('Lien de page invalide');
-        const res = await fetch(`/p/${pageId}?format=json`);
-        if (!res.ok) throw new Error('Cette page n’est plus publiée');
-        board = await res.json();
-      } else board = await ShareCodec.decode(d);
-      const ok = await showConfirm(`Ajouter « ${board.name} » (${board.links.length} lien${board.links.length > 1 ? 's' : ''}) à ton journal ?`, 'Ajouter');
-      if (!ok) return;
-      const { added, skipped, collection } = await Store.importShared(board);
-      toast(`${added} ajouté${added > 1 ? 's' : ''} dans « ${collection} »${skipped ? `, ${skipped} déjà présent${skipped > 1 ? 's' : ''}` : ''}`);
-      await loadSpaces();
-    } catch (e) { toast(e.message, 'error'); }
+    try { await importBoard(ref, { fromSafari: true }); } catch (e) { toast(e.message, 'error'); }
   }
 
   // ===== Sauvegarde : export, envoi, import =====
@@ -975,6 +1021,22 @@ const App = (() => {
       await loadSpaces();
     } catch (e) { toast(e.message, 'error'); }
     finally { exporting = false; }
+  }
+  // Un toucher : Google demande l'accès (sa fenêtre ne peut s'ouvrir qu'après un geste), puis la plus récente
+  // sauvegarde de ce compte est importée, quel que soit l'appareil qui l'a faite.
+  async function restoreLatest(btn) {
+    if (exporting) return;
+    exporting = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Restauration…'; }
+    try {
+      const [latest] = await Drive.list();
+      if (!latest) { toast('Aucune sauvegarde dans le Google Drive de ce compte', 'error'); return; }
+      const { added } = await Store.importFile(await Drive.download(latest.id, latest.name));
+      const when = new Date(latest.createdTime).toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' });
+      toast(`Journal restauré : ${added} élément${added > 1 ? 's' : ''}, sauvegarde du ${when}`);
+      await loadSpaces();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { exporting = false; if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = 'Restaurer depuis Google Drive'; } }
   }
   const downloadBackup = () => runExport(false);
   const shareBackup = () => runExport(true);
@@ -1284,7 +1346,7 @@ const App = (() => {
 
   start();
 
-  return { loadSpaces, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
+  return { loadSpaces, restoreLatest, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
     openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,

@@ -5,7 +5,7 @@
 // Formats : page HTML déjà remplie (humains, agents IA, aperçus WhatsApp), ?format=md (texte), ?format=json (import).
 import { fromPage, toMarkdown, MAX_PAGE_BYTES } from '../../public/share-codec.mjs';
 import { guardedFetch, readCapped } from '../_shared';
-import { htmlPage, boardCards, countLabel, escHtml, PAGE_HEADERS } from '../_board-page';
+import { htmlPage, boardCards, countLabel, escHtml, PAGE_HEADERS, isIos, iosBridge } from '../_board-page';
 
 const FRESH_SECONDS = 120; // délai maximal avant qu'une mise à jour de l'auteur soit visible
 
@@ -54,7 +54,7 @@ export async function onRequestGet(context: { request: Request; params: { id: st
     extraHead: `<link rel="alternate" type="text/markdown" href="/p/${id}?format=md">`,
     body: `<h1>${escHtml(board.name)}</h1>
 <p class="meta">${countLabel(n)}${board.date ? `, mis à jour le ${escHtml(board.date)}` : ''}. Page publiée par son auteur depuis son Google Drive.</p>
-<div class="actions"><a class="btn primary" href="/?import_page=${id}">Ajouter à mon journal leketia</a><a class="btn ghost" href="/p/${id}?format=md">Version texte (Markdown)</a></div>
+${isIos(context.request.headers.get('User-Agent') || '') ? iosBridge(canonical) : ''}<div class="actions"><a class="btn primary" href="/?import_page=${id}">Ajouter à mon journal leketia</a><a class="btn ghost" href="/p/${id}?format=md">Version texte (Markdown)</a></div>
 ${boardCards(board)}`,
   });
 }

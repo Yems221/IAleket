@@ -1,21 +1,13 @@
 // leketia — ouverture d'un partage protégé par mot de passe, dans le navigateur du visiteur.
 // Le serveur ne voit que du chiffré ; ici on déchiffre, on vérifie l'expiration et on affiche le board.
 import { decodeLocked, openLockedPage, encode, toMarkdown, isExpired } from '/share-codec.mjs';
+import { cardsHtml, initViewer } from '/board-render.mjs';
 
-window.__lockReady = true; // le module s'est bien chargé (voir la garde dans la page)
+window.__moduleReady = true; // le module s'est bien chargé (voir la garde dans la page)
 const data = JSON.parse(document.getElementById('lockData').textContent);
 const form = document.getElementById('lockForm');
 const err = document.getElementById('lockErr');
 const mk = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
-
-function youtubeId(raw) {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.replace(/^(www\.|m\.)/, '');
-    const id = host === 'youtu.be' ? u.pathname.slice(1) : (host === 'youtube.com' ? u.searchParams.get('v') || (u.pathname.match(/^\/(?:shorts|embed|live)\/([^/?]+)/) || [])[1] : '');
-    return /^[A-Za-z0-9_-]{6,20}$/.test(id || '') ? id : '';
-  } catch { return ''; }
-}
 
 async function show(board) {
   const root = document.getElementById('board');
@@ -31,22 +23,8 @@ async function show(board) {
   copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(toMarkdown(board)); copy.textContent = 'Texte copié'; } catch { copy.textContent = 'Copie impossible'; } });
   actions.append(add, copy);
   root.append(actions);
-  const list = mk('ol', 'cards');
-  for (const l of board.links) {
-    const li = mk('li', 'card');
-    const yt = youtubeId(l.url);
-    const src = l.img || (yt ? `https://i.ytimg.com/vi/${yt}/mqdefault.jpg` : '');
-    if (src) { const img = mk('img'); img.src = src; img.alt = ''; img.loading = 'lazy'; li.append(img); }
-    const div = mk('div');
-    let host = ''; try { host = new URL(l.url).hostname.replace(/^www\./, ''); } catch { /* adresse invalide */ }
-    div.append(mk('span', 'dom', host));
-    const a = mk('a', '', l.title || l.url); a.href = l.url; a.rel = 'noopener noreferrer nofollow';
-    div.append(a);
-    if (l.note) div.append(mk('p', 'note', l.note));
-    li.append(div);
-    list.append(li);
-  }
-  root.append(list);
+  root.insertAdjacentHTML('beforeend', cardsHtml(board)); // texte échappé par le rendu partagé
+  initViewer(root);
   document.getElementById('locked').hidden = true;
   root.hidden = false;
   document.title = `${board.name} — leketia`;

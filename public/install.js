@@ -16,15 +16,25 @@ const Install = (() => {
   const lire = (store, k) => { try { return store.getItem(k); } catch { return null; } };
   const ecrire = (store, k, v) => { try { store.setItem(k, v); } catch { /* stockage indisponible */ } };
 
+  // App ouverte depuis son icône, quel que soit le mode d'affichage déclaré par le système.
+  const MODES = ['standalone', 'fullscreen', 'minimal-ui', 'window-controls-overlay'];
   function ouverteInstallee() {
-    try { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch { return false; }
+    try { return navigator.standalone === true || MODES.some((m) => matchMedia(`(display-mode: ${m})`).matches); } catch { return false; }
   }
+  const noterInstallee = () => ecrire(localStorage, CLE_INSTALLEE, '1');
   const installeeConnue = () => ouverteInstallee() || lire(localStorage, CLE_INSTALLEE) === '1';
 
   // Chrome propose l'installation par un événement : on le garde, la proposition ne s'ouvre que sur le bouton.
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; render(); });
-  window.addEventListener('appinstalled', () => { deferred = null; ecrire(localStorage, CLE_INSTALLEE, '1'); installee(); });
-  if (ouverteInstallee()) ecrire(localStorage, CLE_INSTALLEE, '1');
+  window.addEventListener('appinstalled', () => { deferred = null; noterInstallee(); installee(); });
+  if (ouverteInstallee()) noterInstallee();
+  // L'app passe en mode installé sans recharger la page (ouverture depuis le navigateur) : on masque aussitôt.
+  MODES.forEach((m) => { try { matchMedia(`(display-mode: ${m})`).addEventListener('change', (e) => { if (e.matches) { noterInstallee(); render(); } }); } catch { /* ancien navigateur */ } });
+  // Dans un onglet Chrome (Android), le navigateur sait si cette PWA est installée, même installée lors d'une autre
+  // visite ou depuis son menu : le manifeste la déclare comme sa propre « application liée ».
+  if (navigator.getInstalledRelatedApps) {
+    navigator.getInstalledRelatedApps().then((apps) => { if (apps && apps.length) { noterInstallee(); render(); } }).catch(() => {});
+  }
 
   const direct = () => !!deferred && parcours !== 'integre' && parcours !== 'android-autre';
 
@@ -77,10 +87,14 @@ const Install = (() => {
     fermer.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
     fermer.addEventListener('click', () => { ecrire(sessionStorage, CLE_BANNIERE, '1'); banniere.hidden = true; });
     ligne.append(el('span'), bouton, fermer);
+    // Sur iPhone, l'onglet Safari ne peut pas savoir que l'app est déjà sur l'écran d'accueil : on peut le dire, une fois.
+    const deja = el('button', 'install-deja', 'Déjà installée sur ce téléphone');
+    deja.type = 'button';
+    deja.addEventListener('click', () => { noterInstallee(); banniere.hidden = true; });
     const r = el('p', 'install-rappel');
     r.append(el('strong', '', 'Pour installer : '), InstallParcours.RAPPEL[parcours] || '');
     r.hidden = true;
-    banniere.append(ligne, r);
+    banniere.append(ligne, r, deja);
     document.querySelector('.navbar').after(banniere);
     render();
   }

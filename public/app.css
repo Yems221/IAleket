@@ -844,6 +844,7 @@ body { background: var(--surface); }
 @media (prefers-reduced-motion: reduce) { .install-bouton { animation: none; } }
 .install-fermer { grid-column: 3; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--ink-secondary); cursor: pointer; }
 .install-rappel, .install-fait { margin: 0; font-size: 13px; text-align: center; }
+.install-deja { justify-self: center; min-height: 32px; padding: 0 8px; border: 0; background: none; color: var(--ink-secondary); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .share-hint { margin: -6px 0 var(--s-4); line-height: 1.45; }
 
 /* Guide à étapes : fenêtre blanche, une étape par vue ; le geste à faire est cerclé. */

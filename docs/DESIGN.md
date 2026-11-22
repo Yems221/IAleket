@@ -90,6 +90,59 @@ jusqu'à 16 px, choix d'une silhouette, puis seulement la matière.
 | Statut en pastille colorée | Texte discret ; « Favori » seul en couleur | Le statut n'est pas l'information principale |
 | Fenêtre d'ajout centrée sur téléphone | Feuille qui monte du bas, coins arrondis en haut | Plus naturel au pouce, comme les feuilles du système |
 
+## Design system (22 novembre 2026)
+
+Source unique : [`public/tokens.css`](../public/tokens.css). L'app la charge avant `app.css`, et les pages publiques
+(`/b`, `/p`, page protégée) la chargent aussi : un lien partagé a les mêmes couleurs, en clair comme en sombre.
+Il est né du carrousel marketing ([`docs/marketing/carrousel`](marketing/carrousel)) et l'applique à l'app.
+
+### Couleurs : quatre rôles
+
+| Rôle | Clair | Sombre | Sert à |
+|---|---|---|---|
+| Bleu roi `--accent` / `--accent-fill` | `#1F4BC9` | `#8fa9ff` (texte) / `#3a62e6` (fond de bouton) | toute action, les liens, la marque |
+| Fond `--paper` | `#f2f5fc` (légèrement bleuté) | `#0b1640` (bleu nuit) | le fond des pages |
+| Surfaces `--surface-elevated` / `--surface-sunken` | `#ffffff` / `#e9eef9` | `#14215a` / `#1a2a68` | cartes et fenêtres / champs, onglets, survols |
+| Ocre `--highlight` | `#e8a93c` | `#e8a93c` | **une seule chose par écran** qui demande l'attention |
+
+- **L'ocre est rare, sinon il ne signale plus rien.** Aujourd'hui : le point du bouton Sauvegarde (rappel) et
+  « Synchroniser mes appareils » sur l'écran vide (bouton `.btn-cta`). Jamais deux par écran.
+- **Encre** `--ink`, `--ink-secondary`, `--ink-muted` et **bordures** `--border-light`, `--border-strong` :
+  teintées de bleu pour aller avec le bleu roi.
+- **Couleurs qui restent fixes, volontairement** : celles des plateformes (badge X, YouTube, Instagram…), le
+  noir des vidéos, le blanc derrière un QR code, et le guide d'installation, qui imite l'écran du téléphone.
+- **Mode sombre automatique** (réglage du téléphone), avec `color-scheme` et deux `theme-color` (bleu roi en
+  clair, bleu nuit en sombre).
+
+### Typographie
+
+- **Sora** pour les titres ; en **800** pour les grands (écran vide, titres de fenêtre). **DM Sans** pour le
+  texte. **JetBrains Mono** pour les bits et les petites étiquettes.
+- Échelle `--text-xs` 12 → `--text-3xl` 36 px.
+- Les pages publiques gardent la police du système : leur politique de sécurité n'autorise pas Google Fonts,
+  et elles s'ouvrent plus vite ainsi.
+
+### Formes et mouvement
+
+- **Boutons et pastilles en pilule** (`--r-full`), cartes en 16 px, fenêtres en 24 px.
+- Ombres teintées d'encre (`--shadow-card`, `--shadow-dialog`…).
+- Courbes et durées dans `--ease-*` et `--dur-*` ; la feuille mobile utilise `--ease-drawer`.
+
+### Le motif des bits « leket »
+
+Les 7 bits du « l » (`1101100`) servent de signature, à deux endroits seulement :
+- **sous la calebasse de l'écran vide** ;
+- **l'indicateur de chargement**, dont les bits s'allument en douceur (pas de rotation).
+
+Ailleurs, le motif deviendrait du bruit.
+
+### Règles pour la suite
+
+1. Une nouvelle couleur passe d'abord par `tokens.css`, avec ses valeurs claire **et** sombre.
+2. Pas de couleur en dur dans `app.css`, sauf celles listées plus haut comme fixes.
+3. Ocre : une seule utilisation par écran.
+4. Vérifier tout nouvel écran en clair et en sombre, sur téléphone.
+
 ## Ce qui reste à faire côté design
 
 - Le focus n'est pas piégé dans les fenêtres (hérité de HomeBoard).

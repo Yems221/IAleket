@@ -406,12 +406,12 @@ const App = (() => {
   }
 
   function emptyStateHtml(filtered) {
-    const mark = '<img src="/brand/leketia-mark.webp" alt="" width="96" height="96">';
+    const mark = '<img src="/brand/leketia-mark.webp" alt="" width="96" height="96"><span class="bitline" aria-hidden="true">' + '1101100'.split('').map(b => `<i class="${b === '1' ? '' : 'o'}"></i>`).join('') + '</span>';
     if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${mark}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
     const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
     const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';
     if (!filtered && journalEmpty && syncReady) {
-      return `<div class="empty-state"><div class="illustration">${mark}</div><h3>Ton journal est vide</h3><p>Tu utilises leketia sur un autre appareil ? Connecte le même compte Google : ton journal arrive ici et reste à jour tout seul.</p><div class="empty-actions"><button class="btn btn-primary" onclick="App.syncConnect(this)">Synchroniser mes appareils</button><button class="btn btn-ghost" onclick="App.showAddItem()">Commencer un nouveau journal</button><button class="btn btn-ghost" onclick="App.showBackup()">Restaurer depuis un fichier</button></div></div>`;
+      return `<div class="empty-state"><div class="illustration">${mark}</div><h3>Ton journal est vide</h3><p>Tu utilises leketia sur un autre appareil ? Connecte le même compte Google : ton journal arrive ici et reste à jour tout seul.</p><div class="empty-actions"><button class="btn btn-cta" onclick="App.syncConnect(this)">Synchroniser mes appareils</button><button class="btn btn-ghost" onclick="App.showAddItem()">Commencer un nouveau journal</button><button class="btn btn-ghost" onclick="App.showBackup()">Restaurer depuis un fichier</button></div></div>`;
     }
     if (!filtered && journalEmpty && driveReady) {
       return `<div class="empty-state"><div class="illustration">${mark}</div><h3>Ton journal est vide</h3><p>Tu avais sauvegardé ton journal dans Google Drive ? Récupère la dernière sauvegarde en un toucher.</p><div class="empty-actions"><button class="btn btn-primary" onclick="App.restoreLatest(this)">Restaurer depuis Google Drive</button><button class="btn btn-ghost" onclick="App.showAddItem()">Commencer un nouveau journal</button><button class="btn btn-ghost" onclick="App.showBackup()">Restaurer depuis un fichier</button></div></div>`;

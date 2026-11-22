@@ -18,7 +18,7 @@ import { cardsHtml, BOARD_CSS, VIEWER_HTML } from '../public/board-render.mjs';
 
 // Lecteurs intégrés autorisés (les mêmes que dans l'app), ouverts seulement au toucher d'une carte.
 const FRAMES = 'https://platform.twitter.com https://www.youtube-nocookie.com https://www.youtube.com https://www.tiktok.com https://www.instagram.com https://assets.pinterest.com';
-const csp = (nonce: string) => `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; frame-src ${FRAMES}; script-src 'nonce-${nonce}' 'strict-dynamic'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+const csp = (nonce: string) => `default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; frame-src ${FRAMES}; script-src 'nonce-${nonce}' 'strict-dynamic'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 
 /** Sur iPhone, un lien s'ouvre toujours dans Safari, jamais dans l'app installée, dont la mémoire est séparée.
  * Le pont sans serveur : copier le lien ici, puis « Coller le lien » dans l'app, qui reconnaît une page leketia. */
@@ -47,21 +47,23 @@ export function htmlPage(opts: { title: string; description: string; origin: str
 <meta property="og:title" content="${t}"><meta property="og:description" content="${d}">
 <meta property="og:image" content="${origin}/brand/leketia-logo.png">${canonical ? `<meta property="og:url" content="${escHtml(canonical)}">` : ''}
 <meta name="twitter:card" content="summary">
-<link rel="icon" type="image/svg+xml" href="/brand/leketia-favicon.svg">${extraHead}
+<link rel="icon" type="image/svg+xml" href="/brand/leketia-favicon.svg">
+<meta name="theme-color" content="#1F4BC9" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0b1640" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="/tokens.css?v=1">${extraHead}
 <style>
-:root{--ink:#1c1917;--muted:#6b6660;--blue:#1F4BC9;--bg:#faf7f2;--card:#fff;--line:#e7e2da}
+:root{--muted:var(--ink-secondary);--blue:var(--accent);--bg:var(--paper);--card:var(--surface-elevated);--line:var(--border-light)}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:720px;margin:0 auto;padding:28px 16px 64px}header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
 header img{width:40px;height:40px}header a{color:var(--ink);text-decoration:none;font-weight:700;font-size:19px;letter-spacing:-.03em}
 h1{font-size:26px;line-height:1.2;margin:0 0 4px;overflow-wrap:anywhere}.meta{color:var(--muted);font-size:14px;margin:0 0 20px}
-.actions{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 24px}.btn{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:12px;font-weight:600;text-decoration:none}
-.primary{background:var(--blue);color:#fff}.ghost{border:1px solid #d6d3d1;color:var(--ink)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 24px}.btn{display:inline-flex;align-items:center;min-height:44px;padding:0 20px;border-radius:999px;font-weight:600;text-decoration:none}
+.primary{background:var(--accent-fill);color:var(--on-accent)}.ghost{border:1px solid var(--border-strong);color:var(--ink)}
 .btn{transition:transform 120ms cubic-bezier(.23,1,.32,1);-webkit-tap-highlight-color:transparent}.btn:active{transform:scale(.97)}
 a:focus-visible,button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.btn{transition:none}}
 ${BOARD_CSS}
-.lock{display:grid;gap:12px;max-width:360px}.lock input{min-height:44px;padding:0 14px;border:1px solid #d6d3d1;border-radius:12px;font:inherit;background:#fff}.lock button{border:0;font:inherit;cursor:pointer;justify-content:center}.lock-err{color:#b42318;font-size:14px;min-height:20px;margin:0}
-.bridge{background:#eef2fd;border:1px solid #c9d5f7;border-radius:16px;padding:14px 16px;margin:0 0 20px}.bridge p{margin:6px 0 12px;font-size:14px}.bridge button{border:0;font:inherit;cursor:pointer}
+.lock{display:grid;gap:12px;max-width:360px}.lock input{min-height:44px;padding:0 14px;border:1px solid var(--border-strong);border-radius:12px;font:inherit;background:var(--surface-elevated);color:var(--ink)}.lock button{border:0;font:inherit;cursor:pointer;justify-content:center}.lock-err{color:var(--danger);font-size:14px;min-height:20px;margin:0}
+.bridge{background:var(--accent-soft);border:1px solid var(--accent-light);border-radius:16px;padding:14px 16px;margin:0 0 20px}.bridge p{margin:6px 0 12px;font-size:14px}.bridge button{border:0;font:inherit;cursor:pointer}
 </style></head><body><main><header><img src="/brand/leketia-mark.webp" alt="" width="40" height="40"><a href="/">leketia</a></header>${body}</main>${body.includes('class="cards"') || opts.module ? VIEWER_HTML : ''}${script}</body></html>`,
     { status, headers: { ...PAGE_HEADERS, Vary: 'User-Agent', 'Cache-Control': cache, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp(nonce) } });
 }

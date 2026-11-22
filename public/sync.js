@@ -40,10 +40,21 @@ const Sync = (() => {
   }
 
   // Images : chaque image utilisée est envoyée une fois ; une image absente ici est récupérée.
+  // Les images arrivent des plus récentes aux plus anciennes : le haut du journal se remplit d'abord.
+  // Toutes les 1,5 s au plus, l'écran est prévenu des images arrivées (affichage au fil de l'eau).
   async function syncMedia(token, merged, meta) {
     const uploaded = new Set(meta.mediaUp || []);
-    const used = [...new Set(merged.items.filter((it) => !it.deleted_at).map((it) => Store.refId(it.image_url)).filter(Boolean))];
+    const recent = merged.items.filter((it) => !it.deleted_at).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    const used = [...new Set(recent.map((it) => Store.refId(it.image_url)).filter(Boolean))];
     let fetched = 0;
+    let shown = 0;
+    let lastShow = Date.now();
+    const progress = (force) => {
+      if (fetched > shown && (force || Date.now() - lastShow > 1500)) {
+        window.dispatchEvent(new CustomEvent('leketia:synced', { detail: { applied: 0, media: fetched - shown, partial: true } }));
+        shown = fetched; lastShow = Date.now();
+      }
+    };
     for (const id of used) {
       const rec = await Store.mediaRecord(id);
       if (rec && !uploaded.has(id)) {
@@ -67,8 +78,10 @@ const Sync = (() => {
         await Store.putMediaRecord({ id, blob, kind: (f.appProperties && f.appProperties.kind) || 'image', type: f.mimeType || blob.type, createdAt: Date.now() });
         uploaded.add(id);
         fetched++;
+        progress(false);
       }
     }
+    progress(true);
     return { mediaUp: [...uploaded].filter((id) => used.includes(id)), fetched };
   }
 
@@ -96,10 +109,7 @@ const Sync = (() => {
       // Rien n'a changé ; reste peut-être une image à envoyer ou à récupérer (échec réseau d'un passage précédent).
       if (await mediaPending(local, meta)) {
         const media = await syncMedia(token, local, meta).catch(() => null);
-        if (media) {
-          await Store.setSyncMeta({ ...meta, mediaUp: media.mediaUp, at: Date.now() });
-          if (media.fetched) window.dispatchEvent(new CustomEvent('leketia:synced', { detail: { applied: 0, media: media.fetched } }));
-        }
+        if (media) await Store.setSyncMeta({ ...meta, mediaUp: media.mediaUp, at: Date.now() });
       }
       set({ status: 'idle', at: Date.now() });
       return { applied: 0 };
@@ -114,6 +124,8 @@ const Sync = (() => {
     const merged = M.merge(local, remote);
     const mergedFp = M.fingerprint(merged);
     const applied = mergedFp !== localFp ? await Store.syncApply(merged) : 0;
+    // Les liens s'affichent tout de suite ; leurs images suivent pendant leur téléchargement.
+    if (applied) window.dispatchEvent(new CustomEvent('leketia:synced', { detail: { applied, media: 0 } }));
 
     let version = head ? head.version : null;
     let fileId = head ? head.id : null;
@@ -127,7 +139,6 @@ const Sync = (() => {
     const media = await syncMedia(token, merged, meta).catch(() => ({ mediaUp: meta.mediaUp || [], fetched: 0 }));
     await Store.setSyncMeta({ version, fp: mergedFp, mediaUp: media.mediaUp, at: Date.now() });
     set({ status: 'idle', at: Date.now() });
-    if (applied || media.fetched) window.dispatchEvent(new CustomEvent('leketia:synced', { detail: { applied, media: media.fetched } }));
     return { applied };
   }
 

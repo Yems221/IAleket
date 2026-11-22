@@ -414,6 +414,10 @@ const App = (() => {
   function emptyStateHtml(filtered) {
     const mark = '<img src="/brand/leketia-mark.webp" alt="" width="96" height="96"><span class="bitline" aria-hidden="true">' + '1101100'.split('').map(b => `<i class="${b === '1' ? '' : 'o'}"></i>`).join('') + '</span>';
     if (activeSpace === 'trash') return `<div class="empty-state"><div class="illustration">${mark}</div><h3>La corbeille est vide</h3><p>Les éléments supprimés restent ici 30 jours.</p></div>`;
+    // Première synchro d'un appareil vide : le journal arrive du Drive, on l'attend au milieu de la page.
+    if (!filtered && journalEmpty && Sync.state().status === 'syncing') {
+      return '<div class="empty-state sync-loading" role="status"><div class="spinner"></div><h3>Ton journal arrive</h3><p>Récupération depuis ton Google Drive. Les liens s’affichent dès qu’ils sont là.</p></div>';
+    }
     const heading = filtered ? 'Aucun élément pour ce filtre' : 'Ton journal est vide';
     const hint = filtered ? 'Choisis un autre tag ou ajoute un lien.' : 'Partage un lien depuis une autre appli, ou ajoute-le ici.';
     if (!filtered && journalEmpty && syncReady) {
@@ -1159,6 +1163,13 @@ const App = (() => {
     b.title = st.status === 'error' ? `Synchronisation en échec : ${st.error}` : st.at ? `Synchronisé à ${new Date(st.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} — toucher pour synchroniser` : 'Synchroniser';
   }
   window.addEventListener('leketia:sync-state', refreshSyncButton);
+  // Journal vide : l'écran passe d'« vide » à « en cours d'arrivée » (et retour) avec l'état de la synchro.
+  let lastSyncStatus = '';
+  window.addEventListener('leketia:sync-state', (e) => {
+    const st = e.detail && e.detail.status;
+    if (st !== lastSyncStatus && journalEmpty && !items.length) renderGrid();
+    lastSyncStatus = st;
+  });
   async function syncTap() { await Sync.run(); refreshSyncButton(); }
 
   // Tirer vers le bas en haut de la liste : synchroniser (geste habituel sur téléphone).

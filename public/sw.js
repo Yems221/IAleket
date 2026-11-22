@@ -4,7 +4,7 @@
 //    les mises à jour arrivent tout de suite. Icônes : cache d'abord.
 importScripts('/idb.js');
 
-const CACHE_NAME = 'leketia-v25';
+const CACHE_NAME = 'leketia-v26';
 const STATIC_ASSETS = [
   '/',
   '/tokens.css',

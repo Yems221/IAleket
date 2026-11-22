@@ -21,6 +21,7 @@ const App = (() => {
   let dragSession = null;      // session de réorganisation d'onglets d'espaces (drag)
   let lastPointer = { x: 0, y: 0 };
   let gridShownOnce = false;   // l'entrée animée des cartes ne joue qu'une fois
+  let renderedSpace = null, renderedTag = null, renderedSig = new Map(); // ce que la grille affiche (rafraîchissement sans clignotement)
 
   // ===== API =====
   // Mêmes appels que dans HomeBoard, servis par le stockage local (store.js).
@@ -122,9 +123,14 @@ const App = (() => {
   // ===== Items =====
   async function loadItems() {
     const grid = document.getElementById('grid');
-    grid.innerHTML = '';
-    for (let i = 0; i < 8; i++) { grid.appendChild(mk('div', 'skeleton-card')); }
-    renderTagBar(); // réserve la barre de tags pendant le chargement (évite un saut de layout)
+    // Cartes grises de chargement seulement quand on change de vue : un simple rafraîchissement
+    // (synchro, image arrivée, ajout) garde les cartes affichées et ne remplace que ce qui change.
+    const sameView = renderedSpace === activeSpace && grid.querySelector(':scope > .card');
+    if (!sameView) {
+      grid.innerHTML = '';
+      for (let i = 0; i < 8; i++) { grid.appendChild(mk('div', 'skeleton-card')); }
+      renderTagBar(); // réserve la barre de tags pendant le chargement (évite un saut de layout)
+    }
 
     try {
       let u;
@@ -137,8 +143,8 @@ const App = (() => {
       }
       const d = await api(u);
       items = d.items || [];
-      renderGrid();
-    } catch { grid.innerHTML = emptyStateHtml(); }
+      if (sameView) { renderTagBar(); refreshGrid(); } else renderGrid();
+    } catch { grid.innerHTML = emptyStateHtml(); renderedSpace = null; }
   }
 
   // Détecte une plateforme embarquable à partir de l'URL de l'item.
@@ -317,9 +323,37 @@ const App = (() => {
     grid.classList.toggle('reveal', !gridShownOnce);
     gridShownOnce = true;
     const visible = activeTag ? items.filter(it => tagsOf(it).includes(activeTag)) : items;
-    if (visible.length === 0) { grid.innerHTML = emptyStateHtml(activeTag); return; }
+    if (visible.length === 0) { grid.innerHTML = emptyStateHtml(activeTag); renderedSpace = null; renderedSig = new Map(); return; }
 
+    visible.forEach((item, idx) => grid.appendChild(buildCard(item, idx)));
+    renderedSpace = activeSpace;
+    renderedTag = activeTag;
+    renderedSig = new Map(visible.map((it) => [it.id, cardSig(it)]));
+  }
+
+  // Ce qui change l'apparence d'une carte : si rien de cela ne bouge, la carte reste telle quelle à l'écran.
+  const cardSig = (it) => JSON.stringify([it.title, it.description, it.url, it.image_url, it.status, it.space_ids, it.price, it.deleted_at, selecting && selected.has(it.id)]);
+
+  // Rafraîchissement sans clignotement : même vue et mêmes cartes dans le même ordre → seules les cartes
+  // modifiées sont remplacées (une image arrivée du Drive, un titre changé). Sinon, rendu complet.
+  function refreshGrid() {
+    const grid = document.getElementById('grid');
+    const visible = activeTag ? items.filter(it => tagsOf(it).includes(activeTag)) : items;
+    const ids = visible.map((it) => it.id);
+    const same = renderedSpace === activeSpace && renderedTag === activeTag && !selecting
+      && ids.length === renderedSig.size && ids.every((id) => renderedSig.has(id))
+      && grid.querySelectorAll(':scope > .card').length === ids.length;
+    if (!same) { renderGrid(); return; }
+    const cards = grid.querySelectorAll(':scope > .card');
     visible.forEach((item, idx) => {
+      const sig = cardSig(item);
+      if (renderedSig.get(item.id) === sig) return;
+      cards[idx].replaceWith(buildCard(item, idx));
+      renderedSig.set(item.id, sig);
+    });
+  }
+
+  function buildCard(item, idx) {
       const card = mk('div', 'card');
       card.style.setProperty('--card-index', idx);
       // Posée comme une note épinglée : inclinaison, décalage et épingle tirés de l'identifiant (stables d'un affichage à l'autre).
@@ -441,8 +475,7 @@ const App = (() => {
         attachLongPress(card, () => { if (!selecting) openEdit(item.id); });
       }
 
-      grid.appendChild(card);
-    });
+      return card;
   }
 
   function emptyStateHtml(filtered) {

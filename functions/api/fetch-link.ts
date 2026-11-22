@@ -61,6 +61,9 @@ export async function onRequestPost(context: { request: Request }): Promise<Resp
     } else if (host.endsWith('youtube.com') || host === 'youtu.be') {
       const o = await simpleOembed(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`);
       if (o) mergePreview(preview, o);
+    } else if (host.endsWith('instagram.com')) {
+      const o = await instagramEmbed(url);
+      if (o) mergePreview(preview, o);
     } else if (/(^|\.)pinterest\.[a-z.]+$/.test(host)) {
       const o = await simpleOembed(`https://www.pinterest.com/oembed.json?url=${encodeURIComponent(url)}`);
       if (o) mergePreview(preview, o);
@@ -164,6 +167,39 @@ async function twitterOembed(url: string): Promise<Partial<Preview> | null> {
       title: d.author_name ? `${d.author_name} sur X` : 'Post X',
       description: clean,
     };
+  } catch {
+    return null;
+  }
+}
+
+// Instagram : Meta a retiré la miniature de son oEmbed (3 nov. 2025) et conseille de la lire dans le HTML
+// du post. La page du lecteur intégré (/p/<id>/embed/) contient l'image du post (EmbeddedMediaImage) et
+// son auteur ; c'est la même image que montre le lecteur dans la fenêtre d'ajout.
+async function instagramEmbed(postUrl: string): Promise<Partial<Preview> | null> {
+  const m = new URL(postUrl).pathname.match(/\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  try {
+    // Agent honnête : présenté comme un navigateur, Instagram renvoie son application JavaScript (sans image) ;
+    // présenté comme leketia, il renvoie la page déjà remplie.
+    const res = await guardedFetch(`https://www.instagram.com/p/${m[2]}/embed/`, {
+      'User-Agent': 'leketia/1.0 (+https://leketia.saccessa.com)',
+      Accept: 'text/html,application/xhtml+xml',
+      'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+    }, 9000);
+    if (!res || !res.ok) return null;
+    const bytes = await readCapped(res, 1024 * 1024, true);
+    if (!bytes) return null;
+    const html = new TextDecoder().decode(bytes);
+    const tag = html.match(/<img[^>]*class="EmbeddedMediaImage"[^>]*>/);
+    if (!tag) return null;
+    const decode = (s: string) => s.replace(/&amp;/g, '&').replace(/&#064;/g, '@').replace(/&quot;/g, '"').replace(/&#039;/g, "'");
+    const src = decode((tag[0].match(/\ssrc="([^"]+)"/) || [])[1] || '');
+    const alt = decode((tag[0].match(/\salt="([^"]*)"/) || [])[1] || '');
+    const author = (alt.match(/@([A-Za-z0-9._]+)/) || [])[1];
+    const out: Partial<Preview> = {};
+    if (/^https:\/\//.test(src)) out.image_url = src;
+    if (author) out.title = `Post Instagram de @${author}`;
+    return out;
   } catch {
     return null;
   }

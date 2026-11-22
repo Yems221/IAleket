@@ -654,12 +654,16 @@ const App = (() => {
     const on = await Drive.available();
     document.getElementById('driveZone').hidden = !on;
     document.getElementById('driveList').hidden = true;
+    // Sans Drive, la copie en fichier est la seule sauvegarde : on l'ouvre d'office et son bouton passe en premier.
+    document.getElementById('backupFile').open = !on;
     document.getElementById('shareBackupBtn').className = 'btn backup-action ' + (on ? 'btn-ghost' : 'btn-primary');
   }
   function showBackup() {
     refreshDriveButton();
     const sel = document.getElementById('backupScope');
     sel.replaceChildren(new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id)));
+    // Le choix n'a de sens qu'avec plusieurs collections.
+    document.getElementById('backupScopeGroup').hidden = spaces.length < 2;
     refreshBackupHint();
     document.getElementById('backupModal').classList.add('active');
   }

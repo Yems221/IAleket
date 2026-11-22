@@ -1,4 +1,6 @@
 /* ===== leketia — styles repris de HomeBoard, bleu roi de la calebasse ===== */
+/* Un élément marqué « hidden » est masqué, quel que soit son style d'affichage (grid, flex…). */
+[hidden] { display: none !important; }
 /* Audited against: UI/UX Pro Max (99 rules), Frontend-Design, Taste-Skill */
 /* 0 emojis, staggered reveals, liquid glass, grain texture, spring physics */
 
@@ -888,3 +890,12 @@ body { background: var(--surface); }
 @media (hover: hover) and (pointer: fine) { .drive-item:hover { border-color: var(--accent); background: var(--accent-soft); } }
 .drive-empty { font-size: 13px; color: var(--ink-secondary); }
 .empty-state .empty-restore { margin: var(--s-3) auto 0; display: flex; }
+
+/* Fenêtre Sauvegarde : Drive d'abord, la copie en fichier repliée */
+.backup-file { margin-top: var(--s-4); border-top: 1px solid var(--border-light); padding-top: var(--s-3); }
+.backup-file > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: 14px; font-weight: 600; color: var(--ink); list-style: none; }
+.backup-file > summary::-webkit-details-marker { display: none; }
+.backup-file > summary::after { content: '›'; margin-left: auto; font-size: 20px; color: var(--ink-muted); transition: transform var(--dur-fast) var(--ease-out); }
+.backup-file[open] > summary::after { transform: rotate(90deg); }
+.backup-file .form-group { margin-top: var(--s-2); }
+.backup-legal { text-align: center; margin-top: var(--s-3); }

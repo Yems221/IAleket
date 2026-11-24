@@ -12,6 +12,7 @@ const Store = (() => {
   const nowSql = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
   const fail = (message) => { throw new Error(message); };
   const text = (v, max = 2000) => String(v == null ? '' : v).slice(0, max);
+  const DESC_MAX = 20000; // description d'un lien : assez pour le texte complet d'un long post X
 
   // Seuls les liens http(s) sont conservés : bloque javascript:, data:, etc.
   function safeLink(raw) {
@@ -185,7 +186,7 @@ const Store = (() => {
         const item = {
           id: crypto.randomUUID(), space_id: spaceIds[0], space_ids: spaceIds, type,
           title: text(body.title, 300).trim() || (link ? new URL(link).hostname.replace(/^www\./, '') : 'Sans titre'),
-          description: text(body.description).trim(), url: link, image_url: toRef(body.image_url),
+          description: text(body.description, DESC_MAX).trim(), url: link, image_url: toRef(body.image_url),
           price: '', status: 'a_voir', deleted_at: null, created_at: nowSql(), updated_at: nowSql(),
         };
         await putItem(item);
@@ -212,7 +213,7 @@ const Store = (() => {
         if (!spaceIds.length) fail('Choisis au moins une collection');
         const link = item.type === 'link' ? safeLink(body.url) || item.url : safeLink(body.url);
         await putItem({
-          ...item, title: text(body.title, 300).trim() || item.title, description: text(body.description).trim(),
+          ...item, title: text(body.title, 300).trim() || item.title, description: text(body.description, DESC_MAX).trim(),
           url: link, space_ids: spaceIds, space_id: spaceIds[0], updated_at: nowSql(),
         });
         return { ok: true };
@@ -323,7 +324,7 @@ const Store = (() => {
       const date = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(it.created_at) ? it.created_at : nowSql();
       await putItem({
         id, type, space_id: spaceIds[0], space_ids: spaceIds, title: text(it.title, 300) || 'Sans titre',
-        description: text(it.description), url: link, image_url: imageRef, price: '',
+        description: text(it.description, DESC_MAX), url: link, image_url: imageRef, price: '',
         status: STATUSES.includes(it.status) ? it.status : 'a_voir', deleted_at: null, created_at: date, updated_at: nowSql(),
       });
       existing.add(id);
@@ -348,7 +349,7 @@ const Store = (() => {
       if (!link || known.has(link)) { skipped++; continue; }
       await putItem({
         id: crypto.randomUUID(), type: 'link', space_id: space.id, space_ids: [space.id],
-        title: text(l.title, 300) || new URL(link).hostname.replace(/^www\./, ''), description: text(l.note, 2000),
+        title: text(l.title, 300) || new URL(link).hostname.replace(/^www\./, ''), description: text(l.note, DESC_MAX),
         url: link, image_url: '', price: '', status: 'a_voir', deleted_at: null, created_at: nowSql(), updated_at: nowSql(),
       });
       known.add(link);

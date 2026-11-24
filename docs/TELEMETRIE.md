@@ -51,7 +51,7 @@ events (
 | `photo_added` | photo ou vidéo ajoutée | `kind`, `via` |
 | `collection_created` | nouvelle collection | `from` (fenetre, ajout) |
 | `share_made` | QR affiché, lien copié ou envoyé, texte IA copié | `tab` (qr, lien, ia), `how`, `scope` (journal, collection, selection), `mdp`, `limite`, `liens` |
-| `page_published` | page publique créée | `scope`, `mdp`, `limite`, `liens` |
+| `page_published` | page publique créée | `scope` (journal, collection, selection, pin : un seul lien partagé depuis la fenêtre Modifier), `mdp`, `limite`, `liens` |
 | `page_edited` | réglages d'une page modifiés | `mdp`, `limite`, `mdp_change` |
 | `page_removed` | page retirée | |
 | `page_view` | page publique servie (sans identifiant d'appareil) | `kind` (p : page publiée, b : lien autoporteur), `statut`, `format` (html, md, json), `lecteur` (personne, apercu, ia, robot), `protegee`, `page` (empreinte courte de la page) |

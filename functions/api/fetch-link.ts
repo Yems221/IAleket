@@ -56,8 +56,9 @@ export async function onRequestPost(context: { request: Request }): Promise<Resp
       const o = await tiktokOembed(url);
       if (o) mergePreview(preview, o);
     } else if (host === 'x.com' || host.endsWith('twitter.com')) {
-      const o = await twitterOembed(url);
+      const [o, full] = await Promise.all([twitterOembed(url), twitterFullText(url)]);
       if (o) mergePreview(preview, o);
+      if (full) preview.description = full; // seulement le texte : titre et miniature restent ceux d'oEmbed
     } else if (host.endsWith('youtube.com') || host === 'youtu.be') {
       const o = await simpleOembed(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`);
       if (o) mergePreview(preview, o);
@@ -167,6 +168,43 @@ async function twitterOembed(url: string): Promise<Partial<Preview> | null> {
       title: d.author_name ? `${d.author_name} sur X` : 'Post X',
       description: clean,
     };
+  } catch {
+    return null;
+  }
+}
+
+// Texte complet d'un post X (posts longs, Articles X), lu en coulisse via FxTwitter (api.fxtwitter.com,
+// projet open source FxEmbed). oEmbed coupe les longs posts et ne donne pas le contenu d'un Article.
+// Absent ou en panne : null, et l'aperçu oEmbed reste tel quel.
+type FxBlock = { text?: string };
+type FxStatus = { text?: string; author?: { name?: string; screen_name?: string }; article?: { title?: string; content?: { blocks?: FxBlock[] } }; quote?: FxStatus };
+// Texte d'un post : son Article X (titre et paragraphes) s'il en a un, sinon son texte.
+function fxBody(st: FxStatus): string {
+  const art = st.article;
+  const body = art && art.content && Array.isArray(art.content.blocks)
+    ? [art.title || '', ...art.content.blocks.map((b) => (typeof b.text === 'string' ? b.text : ''))].filter((t) => t.trim()).join('\n\n')
+    : typeof st.text === 'string' ? st.text : '';
+  return body.trim();
+}
+const fxAuthor = (st: FxStatus) => (st.author && st.author.name && st.author.screen_name ? `${st.author.name} (@${st.author.screen_name})` : '');
+async function twitterFullText(url: string): Promise<string | null> {
+  const id = (url.match(/\/status(?:es)?\/(\d{1,25})/) || [])[1];
+  if (!id) return null;
+  try {
+    const res = await fetch(`https://api.fxtwitter.com/2/status/${id}`, {
+      headers: { 'User-Agent': 'leketia/1.0 (+https://leketia.saccessa.com)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const st = ((await res.json()) as { status?: FxStatus }).status;
+    if (!st) return null;
+    const body = fxBody(st);
+    if (!body) return null;
+    let out = body + (fxAuthor(st) ? ` — ${fxAuthor(st)}` : '');
+    // Post cité (et son Article X) : il fait partie de ce que l'auteur partage.
+    const q = st.quote && fxBody(st.quote);
+    if (q) out += `\n\nPost cité${fxAuthor(st.quote!) ? ` — ${fxAuthor(st.quote!)}` : ''} :\n${q}`;
+    return out.slice(0, 20000);
   } catch {
     return null;
   }

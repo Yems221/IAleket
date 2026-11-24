@@ -5,7 +5,7 @@
 Une calebasse de données : un journal de liens personnel et open source. Tu partages un lien depuis
 X, Instagram, YouTube, TikTok ou Pinterest, il devient une carte avec aperçu, et tout reste sur ton appareil.
 
-**En ligne : [leketia.pages.dev](https://leketia.pages.dev)** (Cloudflare Pages, déployé à chaque mise à jour de `main`). Pas encore testé sur téléphone.
+**En ligne : [leketia.saccessa.com](https://leketia.saccessa.com)** (aussi [leketia.pages.dev](https://leketia.pages.dev)) (Cloudflare Pages, déployé à chaque mise à jour de `main`). Pas encore testé sur téléphone.
 
 ## Ce que fait cette version
 

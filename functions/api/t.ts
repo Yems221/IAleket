@@ -14,6 +14,7 @@ const flag = (v: unknown) => (typeof v === 'boolean' ? v : undefined);
 type Check = (v: unknown) => unknown;
 
 const CTX: Record<string, Check> = { os: word, browser: word, form: word, mode: word, theme: word, lang: word };
+// scope : journal, collection, selection, ou pin (un seul lien partagé depuis la fenêtre Modifier).
 const SCOPE: Record<string, Check> = { scope: word, mdp: flag, limite: flag, liens: count };
 const EVENTS: Record<string, Record<string, Check>> = {
   app_open: CTX,

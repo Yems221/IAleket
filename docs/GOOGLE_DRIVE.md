@@ -36,8 +36,8 @@ Dans la [console Google Cloud](https://console.cloud.google.com/), avec le compt
    - La liste des utilisateurs de test peut mettre plusieurs minutes à s'afficher après l'ajout.
 4. **API et services → Identifiants → Créer des identifiants → ID client OAuth :**
    - type **Application Web** ;
-   - **Origines JavaScript autorisées :** l'adresse de l'instance, par exemple `https://leketia.pages.dev`
-     (ajouter aussi `http://localhost:8788` pour essayer en local) ;
+   - **Origines JavaScript autorisées :** chaque adresse de l'instance, par exemple `https://leketia.saccessa.com`
+     et `https://leketia.pages.dev` (ajouter aussi `http://localhost:8788` pour essayer en local) ;
    - aucune URI de redirection n'est nécessaire.
 5. Copier l'**ID client** (il se termine par `.apps.googleusercontent.com`).
 

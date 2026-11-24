@@ -115,3 +115,22 @@ test('page publiée protégée : chiffrée, expiration lisible, ouverte avec le 
   assert.equal((await openLockedPage(page, 'secret')).links[0].title, board.links[0].title);
   await assert.rejects(openLockedPage(page, 'non'), /Mot de passe incorrect/);
 });
+
+test('page publiée : le texte complet d’un long post arrive entier, dans le HTML comme en Markdown', async () => {
+  const long = 'Full text of article. '.repeat(220); // ~4 800 caractères, comme un long post X
+  const b = { name: 'Pin', date: '2026-11-24', links: [{ title: 'Auteur sur X', url: 'https://x.com/a/status/1', note: long }] };
+  const page = fromPage(JSON.parse(JSON.stringify(toPage(b))));
+  assert.equal(page.links[0].note, long.trim());
+  assert.ok(toMarkdown(page).includes(long.trim()));
+});
+
+test('lien ou QR code : la note reste courte (la place y est comptée)', async () => {
+  const b = { name: 'Pin', date: '2026-11-24', links: [{ title: 'X', url: 'https://x.com/a/status/1', note: 'a'.repeat(5000) }] };
+  const back = await decode(await encode(b));
+  assert.equal(back.links[0].note.length, 1000);
+});
+
+test('Markdown : les lignes et paragraphes d’une note restent en place, en retrait sous le lien', () => {
+  const md = toMarkdown({ name: 'Pin', date: '2026-11-24', links: [{ title: 'X', url: 'https://x.com/a/status/1', note: 'Titre\n\n1. Un\nhttp://github.com/a/b\n\n\n2. Deux' }] });
+  assert.ok(md.includes('- [X](https://x.com/a/status/1)\n  Titre\n\n  1. Un\n  http://github.com/a/b\n\n  2. Deux\n'));
+});

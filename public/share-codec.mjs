@@ -49,10 +49,15 @@ const text = (v, max) => String(v == null ? '' : v).slice(0, max);
 export const MAX_IMG_CHARS = 40000;
 const safeImg = (v) => (typeof v === 'string' && v.length <= MAX_IMG_CHARS && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(v) ? v : '');
 
+// Note d'un lien : courte dans un lien ou un QR code (la place y est comptée), entière dans une page publiée
+// (ex. texte complet d'un long post X), pour qu'un agent IA qui ouvre la page lise tout.
+export const NOTE_MAX_LINK = 1000;
+export const NOTE_MAX_PAGE = 20000;
+
 /** Board partagé : { name, date, links: [{ title, url, note }] }, nettoyé (liens http(s) seulement). */
-export function clean(board) {
+export function clean(board, noteMax = NOTE_MAX_LINK) {
   const links = (Array.isArray(board && board.links) ? board.links : [])
-    .map((l) => { const img = safeImg(l && l.img); return { title: text(l && l.title, 300).trim(), url: safeLink(l && l.url), note: text(l && l.note, 1000).trim(), ...(img ? { img } : {}) }; })
+    .map((l) => { const img = safeImg(l && l.img); return { title: text(l && l.title, 300).trim(), url: safeLink(l && l.url), note: text(l && l.note, noteMax).trim(), ...(img ? { img } : {}) }; })
     .filter((l) => l.url)
     .slice(0, MAX_LINKS);
   const x = board && typeof board.expires === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(board.expires) ? board.expires : '';
@@ -140,7 +145,7 @@ export const MAX_PAGE_BYTES = 1024 * 1024;
 
 /** Contenu du fichier publié dans le Drive. */
 export function toPage(board) {
-  const b = clean(board);
+  const b = clean(board, NOTE_MAX_PAGE);
   return { kind: PAGE_KIND, v: 1, n: b.name, d: b.date, l: b.links.map((l) => (l.img ? [l.title, l.url, l.note, l.img] : l.note ? [l.title, l.url, l.note] : [l.title, l.url])), ...(b.expires ? { x: b.expires } : {}) };
 }
 
@@ -157,7 +162,7 @@ export async function openLockedPage(raw, password) {
 /** Lit un fichier publié ; refuse tout ce qui n'est pas une page leketia. */
 export function fromPage(raw) {
   if (!raw || raw.kind !== PAGE_KIND || raw.v !== 1 || !Array.isArray(raw.l)) throw new Error('Ce n’est pas une page leketia');
-  return clean({ name: raw.n, date: raw.d, expires: raw.x, links: raw.l.map((x) => ({ title: x && x[0], url: x && x[1], note: x && x[2], img: x && x[3] })) });
+  return clean({ name: raw.n, date: raw.d, expires: raw.x, links: raw.l.map((x) => ({ title: x && x[0], url: x && x[1], note: x && x[2], img: x && x[3] })) }, NOTE_MAX_PAGE);
 }
 
 /** Empreinte du contenu (sans la date) : sert à savoir si la page publiée est à jour. */
@@ -169,12 +174,13 @@ export async function pageHash(board) {
 
 /** Texte Markdown, le format que les agents IA lisent le mieux. */
 export function toMarkdown(board, { source } = {}) {
-  const b = clean(board);
+  const b = clean(board, NOTE_MAX_PAGE); // le board est déjà nettoyé à sa source (lien ou page) : rien de plus n'est coupé ici
   const esc = (s) => s.replace(/([\[\]])/g, '\\$1');
   const lines = [`# ${b.name}`, '', `${b.links.length} lien${b.links.length > 1 ? 's' : ''}${b.date ? `, partagé le ${b.date}` : ''} depuis leketia.`, ''];
   for (const l of b.links) {
     lines.push(`- [${esc(l.title || l.url)}](${l.url})`);
-    if (l.note) lines.push(`  ${l.note.replace(/\s*\n\s*/g, ' ')}`);
+    // Lignes et paragraphes gardés (ex. liste d'un post X), en retrait sous le lien.
+    if (l.note) lines.push(...l.note.trim().split(/\r?\n/).map((x) => (x.trim() ? `  ${x.trim()}` : '')).filter((x, i, a) => x || a[i - 1]));
   }
   if (source) lines.push('', `Source : ${source}`);
   return lines.join('\n') + '\n';

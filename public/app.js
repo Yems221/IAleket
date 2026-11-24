@@ -28,6 +28,14 @@ const App = (() => {
   // Mêmes appels que dans HomeBoard, servis par le stockage local (store.js).
   const api = (path, opts) => Store.api(path, opts);
 
+  // Adresse publique des liens de partage, donnée par la configuration de l'instance (ex. leketia.saccessa.com),
+  // même si l'app est ouverte depuis une autre adresse. Sans réponse : l'adresse où l'app est ouverte.
+  let publicOrigin = location.origin;
+  const originReady = fetch('/config.json', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : {}))
+    .then((c) => { if (c && c.publicOrigin) publicOrigin = c.publicOrigin; })
+    .catch(() => {});
+
   const whenShareCodec = () => new Promise((resolve) => {
     const check = () => (window.ShareCodec ? resolve() : setTimeout(check, 30));
     check();
@@ -44,6 +52,7 @@ const App = (() => {
       await whenShareCodec();
       handleImportLink();
       cleanupExpired().catch(() => {});
+      setTimeout(() => completeXTexts().catch(() => {}), 5000); // après le démarrage, sans le ralentir
       Sync.start(); // sans fenêtre : ne fait rien tant que la synchronisation n'est pas activée sur cet appareil
       refreshSyncButton();
       Telemetry.start(((document.querySelector('script[src*="/app.js"]') || {}).src || '').split('v=')[1] || '');
@@ -51,6 +60,36 @@ const App = (() => {
       document.getElementById('grid').innerHTML = '';
       toast('Le stockage de ce navigateur est indisponible (navigation privée ?)', 'error');
     }
+  }
+
+  // ===== Liens X déjà enregistrés : texte complet, une seule passe par appareil =====
+  // Avant le 24 nov. 2026, le texte d'un post X était coupé à 280 caractères. Une fois, à l'ouverture,
+  // l'app relit chaque lien X qui semble coupé et garde le texte complet (post, post cité, Article X).
+  // La description n'est remplacée que si le nouveau texte est plus long ET commence comme l'ancien :
+  // une note écrite à la main n'est jamais écrasée. Titre et miniature ne changent pas.
+  const X_FULL_DONE = 'leketia-x-texte-complet-v1';
+  const isXLink = (u) => { try { const h = new URL(u).hostname.replace(/^www\./, ''); return h === 'x.com' || h.endsWith('twitter.com'); } catch { return false; } };
+  const flat = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  async function completeXTexts() {
+    try { if (localStorage.getItem(X_FULL_DONE)) return; } catch { /* stockage refusé : la passe refera le tri, sans risque */ }
+    if (!navigator.onLine) return;
+    const todo = (await api('/api/items')).items.filter(it => it.url && isXLink(it.url) && (!it.description || it.description.length <= 300 || it.description.includes('…')));
+    let changed = 0;
+    for (const it of todo) {
+      if (!navigator.onLine) return; // reprise à la prochaine ouverture
+      try {
+        const res = await fetch('/api/fetch-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: it.url }) });
+        const full = res.ok ? ((await res.json()).preview || {}).description || '' : '';
+        const old = flat(it.description), start = old.replace(/….*$/, '').slice(0, 30);
+        if (full.length > (it.description || '').length && flat(full).startsWith(start)) {
+          await api('/api/items/' + it.id, { method: 'PUT', body: { title: it.title, description: full, url: it.url, space_ids: it.space_ids } });
+          changed++;
+        }
+      } catch { /* ce lien reste tel quel */ }
+      await new Promise(r => setTimeout(r, 1200)); // un lien à la fois, sans surcharger le service
+    }
+    try { localStorage.setItem(X_FULL_DONE, String(Date.now())); } catch { /* rien */ }
+    if (changed) await loadItems();
   }
 
   // ===== Spaces =====
@@ -269,6 +308,7 @@ const App = (() => {
     document.getElementById('editUrl').value = item.url || '';
     document.getElementById('editUrlGroup').style.display = item.type === 'link' ? '' : 'none';
     renderCatChecks('editItemCats', item.space_ids || []);
+    resetPinShare(item);
     document.getElementById('editItemModal').classList.add('active');
   }
   function closeEdit() { document.getElementById('editItemModal').classList.remove('active'); editingId = null; }
@@ -828,11 +868,21 @@ const App = (() => {
     const s = pubSource(key, pub);
     if (!s.ids) return boardFor(s.src || null, { thumbs });
     const all = (await api('/api/items')).items;
-    return boardOf(s.ids.map(id => all.find(it => it.id === id)).filter(it => it && it.url), pub.name || 'Ma sélection', thumbs);
+    const its = s.ids.map(id => all.find(it => it.id === id)).filter(it => it && it.url);
+    const name = pub.pin ? (its[0] && its[0].title) || pub.name || 'Lien' : pub.name || 'Ma sélection'; // un pin suit le titre du lien
+    return boardOf(its, name, thumbs);
   }
   async function boardOf(its, name, thumbs) {
     const links = its.map(it => ({ title: it.title, url: it.url, note: it.description }));
     if (thumbs) { // page publiée : petites miniatures intégrées au fichier, dans la limite du budget
+      // Textes longs (ex. post X complet) : entiers tant que la page reste sous la taille que le serveur lit (1 Mo),
+      // au-delà, coupés à 1 000 caractères comme avant.
+      let noteBudget = NOTE_BUDGET;
+      for (const l of links) {
+        const n = l.note || '';
+        if (n.length <= 1000) continue;
+        if (n.length <= noteBudget) noteBudget -= n.length; else l.note = n.slice(0, 1000);
+      }
       let budget = THUMB_BUDGET;
       for (let i = 0; i < its.length; i++) {
         if (!its[i].image_url || its[i].media_kind === 'video') continue;
@@ -845,6 +895,7 @@ const App = (() => {
 
   // Miniature réduite (240 px de large, JPEG) en texte data:, mémorisée pendant la session.
   const THUMB_BUDGET = 700 * 1024;
+  const NOTE_BUDGET = 150 * 1000; // caractères de textes longs par page (accents : jusqu'à 2 octets chacun)
   const thumbCache = new Map();
   async function thumbData(blobUrl) {
     if (thumbCache.has(blobUrl)) return thumbCache.get(blobUrl);
@@ -868,9 +919,10 @@ const App = (() => {
   }
   // Le plus grand début du board dont le lien tient dans la limite (recherche par dichotomie).
   async function fitBoard(board, max, lock = null) {
+    await originReady;
     const url = async (n) => {
       const d = await ShareCodec.encode({ ...board, links: board.links.slice(0, n) });
-      return lock ? `${location.origin}/b?e=${await ShareCodec.sealWithKey(lock.key, lock.salt, d)}` : `${location.origin}/b?d=${d}`;
+      return lock ? `${publicOrigin}/b?e=${await ShareCodec.sealWithKey(lock.key, lock.salt, d)}` : `${publicOrigin}/b?d=${d}`;
     };
     let full = await url(board.links.length);
     if (full.length <= max) return { url: full, count: board.links.length };
@@ -914,7 +966,7 @@ const App = (() => {
     const opts = [new Option('Tout le journal', ''), ...orderedSpaces().map(s => new Option(`Collection « ${s.name} »`, s.id))];
     if (selected.size) opts.push(new Option(`Ma sélection (${selected.size} lien${selected.size > 1 ? 's' : ''})`, 'sel'));
     const pubs = await Store.publications();
-    for (const [k, p] of Object.entries(pubs)) if (p.ids) opts.push(new Option(`Sélection publiée « ${p.name || 'Ma sélection'} »`, k));
+    for (const [k, p] of Object.entries(pubs)) if (p.ids && !p.pin) opts.push(new Option(`Sélection publiée « ${p.name || 'Ma sélection'} »`, k));
     opts.push(new Option('Choisir les liens au clic…', '__pick'));
     sel.replaceChildren(...opts);
     // Chaque ouverture repart sans protection : un ancien mot de passe ou une ancienne date ne s'appliquent jamais en douce.
@@ -1034,7 +1086,7 @@ const App = (() => {
   // Chaque page est un fichier du Drive de la personne ; /p/<id> l'affiche. Une même collection (ou sélection)
   // peut avoir plusieurs pages, chacune avec son mot de passe et sa date limite, modifiables sans changer de lien.
   // La liste des pages reste sur l'appareil qui les a publiées. Rien n'est stocké sur le serveur de leketia.
-  const pageUrl = (id) => `${location.origin}/p/${id}`;
+  const pageUrl = (id) => `${publicOrigin}/p/${id}`;
   const frDate = (iso) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
   const isExpired = (pub) => !!pub.expires && Date.parse(pub.expires) <= Date.now();
 
@@ -1046,6 +1098,7 @@ const App = (() => {
   }
   function pubLabel(key, pub) {
     const s = pubSource(key, pub);
+    if (pub.pin) return `Lien « ${(items.find(i => i.id === pub.ids[0]) || {}).title || pub.name || 'Lien'} »`; // titre actuel du lien
     if (s.ids) return `Sélection « ${pub.name || 'Ma sélection'} »`;
     if (!s.src) return 'Tout le journal';
     const sp = spaces.find(x => x.id === s.src);
@@ -1174,9 +1227,10 @@ const App = (() => {
   function closePages() { document.getElementById('pagesModal').classList.remove('active'); }
 
   // Publie une nouvelle page ; renvoie sa clé.
-  async function publishPage(scope, { password = '', expires = '', name = '' } = {}) {
+  // ids : un seul lien partagé depuis la fenêtre Modifier (page « pin »).
+  async function publishPage(scope, { password = '', expires = '', name = '', ids = null } = {}) {
     const key = 'pg-' + crypto.randomUUID().slice(0, 8);
-    const pub = scope === 'sel' ? { ids: [...selected], name: name || 'Ma sélection' } : { src: scope || '', name };
+    const pub = ids ? { ids, name, pin: true } : scope === 'sel' ? { ids: [...selected], name: name || 'Ma sélection' } : { src: scope || '', name };
     const board = await pubBoard(key, pub, { thumbs: true });
     if (expires) { board.expires = expires; pub.expires = expires; }
     let page = ShareCodec.toPage(board);
@@ -1189,7 +1243,7 @@ const App = (() => {
     const all = await Store.publications();
     all[key] = { ...pub, fileId, hash: await ShareCodec.pageHash(board), publishedAt: Date.now(), updatedAt: Date.now() };
     await Store.savePublications(all);
-    Telemetry.track('page_published', { scope: scope === 'sel' ? 'selection' : scope ? 'collection' : 'journal', mdp: !!password, limite: !!expires, liens: board.links.length });
+    Telemetry.track('page_published', { scope: ids ? 'pin' : scope === 'sel' ? 'selection' : scope ? 'collection' : 'journal', mdp: !!password, limite: !!expires, liens: board.links.length });
     return key;
   }
 
@@ -1247,6 +1301,51 @@ const App = (() => {
     await Store.savePublications(all);
   }
 
+  // ===== Partager un seul lien : sa propre page publiée, sans mot de passe ni date limite =====
+  // Une page par lien : si elle existe déjà, on la réutilise (mise à jour si le lien a changé).
+  const SHARE_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>';
+  function resetPinShare(item) {
+    const box = document.getElementById('editShare');
+    box.hidden = !item.url; // une photo seule n'a pas d'adresse à partager
+    const b = mk('button', 'btn btn-ghost'); b.type = 'button';
+    b.innerHTML = SHARE_ICON + '<span>Partager ce lien</span>';
+    b.addEventListener('click', () => sharePin(item.id, b));
+    box.replaceChildren(b);
+  }
+  const pinKeyOf = (all, id) => Object.keys(all).find(k => all[k].pin && all[k].ids && all[k].ids[0] === id && !isExpired(all[k]));
+  async function sharePin(id, btn) {
+    const item = items.find(i => i.id === id);
+    if (!item || !item.url) return;
+    btn.disabled = true; btn.lastChild.textContent = 'Publication…';
+    try {
+      if (!(await Drive.available())) throw new Error('Le partage d’un lien passe par Google Drive, qui n’est pas configuré sur cette instance.');
+      let key = pinKeyOf(await Store.publications(), id);
+      if (key) {
+        try { await updatePage(key, true); }
+        catch (e) { if (pinKeyOf(await Store.publications(), id)) throw e; key = null; } // fichier supprimé du Drive : nouvelle page
+      }
+      if (!key) key = await publishPage('', { ids: [id], name: item.title || 'Lien' });
+      const pub = (await Store.publications())[key];
+      if (editingId !== id) return; // fenêtre fermée ou autre lien entre-temps
+      document.getElementById('editShare').replaceChildren(pinShareCard(pub));
+    } catch (e) {
+      toast(e.message, 'error');
+      btn.disabled = false; btn.lastChild.textContent = 'Partager ce lien';
+    }
+  }
+  function pinShareCard(pub) {
+    const box = mk('div', 'pub-card');
+    const url = pageUrl(pub.fileId);
+    const link = mk('a', 'share-url'); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = url.replace(/^https?:\/\//, '');
+    const hint = mk('p', 'hint'); hint.textContent = 'Lisible par une personne et par un agent IA, sans compte. La page suit les modifications de ce lien.';
+    const row = mk('div', 'pub-actions');
+    const act = (label, cls, fn) => { const b = mk('button', 'btn btn-sm ' + cls); b.type = 'button'; b.textContent = label; b.addEventListener('click', fn); row.append(b); };
+    if (navigator.share) act('Envoyer', 'btn-primary', async () => { try { await navigator.share({ title: pub.name || 'leketia', url }); } catch { /* annulé */ } });
+    act('Copier le lien', navigator.share ? 'btn-ghost' : 'btn-primary', async () => { try { await navigator.clipboard.writeText(url); toast('Lien copié'); } catch { toast('Copie impossible', 'error'); } });
+    box.append(link, row, hint);
+    return box;
+  }
+
   async function unpublishPage(key) {
     const all = await Store.publications();
     if (all[key]) {
@@ -1281,7 +1380,7 @@ const App = (() => {
   function leketiaBoardRef(raw) {
     try {
       const u = new URL(raw, location.origin);
-      if (u.origin !== location.origin) return null;
+      if (u.origin !== location.origin && u.origin !== publicOrigin) return null; // les deux adresses de l'instance
       if (u.pathname === '/b' && u.searchParams.get('d')) return { d: u.searchParams.get('d'), url: u.href };
       const m = u.pathname.match(/^\/p\/([A-Za-z0-9_-]{20,100})$/);
       if (m) return { pageId: m[1], url: u.href };
@@ -1361,7 +1460,7 @@ const App = (() => {
     const d = params.get('import') || hashImport;
     const pageId = params.get('import_page');
     if (!d && !pageId) return;
-    const ref = pageId ? { pageId, url: `${location.origin}/p/${pageId}` } : { d, url: `${location.origin}/b?d=${d}` };
+    const ref = pageId ? { pageId, url: `${publicOrigin}/p/${pageId}` } : { d, url: `${publicOrigin}/b?d=${d}` };
     history.replaceState({}, '', '/');
     try { await importBoard(ref, { fromSafari: true }); } catch (e) { toast(e.message, 'error'); }
   }

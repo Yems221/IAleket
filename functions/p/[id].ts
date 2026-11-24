@@ -71,7 +71,8 @@ async function handle(context: Ctx): Promise<Response> {
   const canonical = `${url.origin}/p/${id}`;
   return htmlPage({
     title: board.name, origin: url.origin, canonical, cache: `public, max-age=${FRESH_SECONDS}`,
-    description: `${countLabel(n)} — page publiée avec leketia`,
+    // Un seul lien (pin partagé) : l'aperçu montre son contenu (ex. texte du post X) plutôt qu'un simple compte.
+    description: n === 1 ? (board.links[0].note || board.links[0].url).slice(0, 200) : `${countLabel(n)} — page publiée avec leketia`,
     extraHead: `<link rel="alternate" type="text/markdown" href="/p/${id}?format=md">`,
     body: `<h1>${escHtml(board.name)}</h1>
 <p class="meta">${countLabel(n)}${board.date ? `, mis à jour le ${escHtml(board.date)}` : ''}${board.expires ? `, visible jusqu'au ${escHtml(new Date(board.expires).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }))}` : ''}. Page publiée par son auteur depuis son Google Drive.</p>

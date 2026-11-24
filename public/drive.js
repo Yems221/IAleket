@@ -206,7 +206,7 @@ const Drive = (() => {
   const connect = () => getToken();
 
   // ---- Pages publiées : un fichier JSON public, visible dans le Drive de l'auteur -------------
-  // Toute personne qui a le lien peut le lire ; leketia.pages.dev/p/<id> l'affiche.
+  // Toute personne qui a le lien peut le lire ; leketia.saccessa.com/p/<id> l'affiche.
 
   async function publish(page, name) {
     if (!(await available())) throw new Error('Google Drive n’est pas configuré sur cette instance');

@@ -23,7 +23,7 @@
 
   <!-- Fonts -->
   <link rel="stylesheet" href="/tokens.css?v=4">
-  <link rel="stylesheet" href="/app.css?v=19">
+  <link rel="stylesheet" href="/app.css?v=20">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
@@ -125,6 +125,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
     <h2>Modifier l'élément</h2>
+    <div class="pin-share" id="editShare"></div>
     <div class="modal-body">
       <div class="form-group"><label for="editTitle">Titre</label><input type="text" id="editTitle"></div>
       <div class="form-group"><label for="editDesc">Description</label><textarea id="editDesc" rows="2"></textarea></div>
@@ -294,8 +295,8 @@
 <div class="toast-container" id="toasts" aria-live="polite" aria-atomic="true"></div>
 
 <script src="/idb.js?v=1"></script>
-<script src="/store.js?v=3"></script>
-<script src="/drive.js?v=5"></script>
+<script src="/store.js?v=4"></script>
+<script src="/drive.js?v=6"></script>
 <script src="/sync.js?v=3"></script>
 <script src="/telemetry.js?v=1"></script>
 <script src="/install-parcours.js?v=2"></script>
@@ -313,6 +314,6 @@ if (!fresh && !sessionStorage.getItem('leketia:healed')) {
   location.reload();
 } else { window.SyncMerge = SyncMerge; window.ShareCodec = ShareCodec; }
 </script>
-<script src="/app.js?v=18"></script>
+<script src="/app.js?v=20"></script>
 </body>
 </html>

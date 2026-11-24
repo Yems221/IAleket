@@ -27,6 +27,6 @@
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
-  "related_applications": [{ "platform": "webapp", "url": "https://leketia.pages.dev/manifest.webmanifest" }],
+  "related_applications": [{ "platform": "webapp", "url": "/manifest.webmanifest" }],
   "prefer_related_applications": false
 }

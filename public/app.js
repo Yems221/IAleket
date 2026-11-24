@@ -223,11 +223,26 @@ const App = (() => {
     box.innerHTML = `<iframe src="${esc(emb.src)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin" title="${esc(item.title || emb.platform)}"></iframe>`;
     document.getElementById('embedTitle').textContent = item.title || '';
     document.getElementById('embedOpenLink').href = item.url;
+    embedId = item.id;
+    resetEmbedShare(true);
     document.getElementById('embedModal').classList.add('active');
+  }
+  // Partager depuis le lecteur : même page que « Partager ce lien » de la fenêtre Modifier.
+  let embedId = null;
+  function resetEmbedShare(show) {
+    const b = document.getElementById('embedShareBtn');
+    b.hidden = !show; b.disabled = false; b.lastChild.textContent = 'Partager';
+    const box = document.getElementById('embedShare');
+    box.hidden = true; box.replaceChildren();
+  }
+  function shareEmbed() {
+    const id = embedId, b = document.getElementById('embedShareBtn'), box = document.getElementById('embedShare');
+    sharePin(id, b, (card) => { if (embedId !== id) return; b.hidden = true; box.replaceChildren(card); box.hidden = false; }, 'Partager');
   }
 
   function closeEmbed() {
     document.getElementById('embedModal').classList.remove('active');
+    embedId = null; resetEmbedShare(false);
     document.getElementById('embedBox').innerHTML = ''; // stoppe la lecture (embed OU vidéo locale)
   }
 
@@ -248,6 +263,7 @@ const App = (() => {
     else { el.alt = title || 'Média'; }
     box.appendChild(el);
     document.getElementById('embedTitle').textContent = title || (isVid ? 'Vidéo' : 'Photo');
+    embedId = null; resetEmbedShare(false); // photo ou vidéo de l'appareil : pas de lien à partager
     document.getElementById('embedOpenLink').href = url;
     document.getElementById('embedModal').classList.add('active');
   }
@@ -1309,11 +1325,12 @@ const App = (() => {
     box.hidden = !item.url; // une photo seule n'a pas d'adresse à partager
     const b = mk('button', 'btn btn-ghost'); b.type = 'button';
     b.innerHTML = SHARE_ICON + '<span>Partager ce lien</span>';
-    b.addEventListener('click', () => sharePin(item.id, b));
+    b.addEventListener('click', () => sharePin(item.id, b, (card) => { if (editingId === item.id) document.getElementById('editShare').replaceChildren(card); }));
     box.replaceChildren(b);
   }
   const pinKeyOf = (all, id) => Object.keys(all).find(k => all[k].pin && all[k].ids && all[k].ids[0] === id && !isExpired(all[k]));
-  async function sharePin(id, btn) {
+  // show(card) : affiche la carte du lien publié là où le bouton a été touché (fenêtre Modifier ou lecteur).
+  async function sharePin(id, btn, show, label = 'Partager ce lien') {
     const item = items.find(i => i.id === id);
     if (!item || !item.url) return;
     btn.disabled = true; btn.lastChild.textContent = 'Publication…';
@@ -1325,12 +1342,10 @@ const App = (() => {
         catch (e) { if (pinKeyOf(await Store.publications(), id)) throw e; key = null; } // fichier supprimé du Drive : nouvelle page
       }
       if (!key) key = await publishPage('', { ids: [id], name: item.title || 'Lien' });
-      const pub = (await Store.publications())[key];
-      if (editingId !== id) return; // fenêtre fermée ou autre lien entre-temps
-      document.getElementById('editShare').replaceChildren(pinShareCard(pub));
+      show(pinShareCard((await Store.publications())[key])); // ne s'affiche que si la même fenêtre est encore ouverte
     } catch (e) {
       toast(e.message, 'error');
-      btn.disabled = false; btn.lastChild.textContent = 'Partager ce lien';
+      btn.disabled = false; btn.lastChild.textContent = label;
     }
   }
   function pinShareCard(pub) {
@@ -2034,6 +2049,6 @@ const App = (() => {
   return { loadSpaces, syncTap, restoreLatest, receiveInbox, syncConnect, syncNow, syncDisconnect, scopeChanged, shareOptionsChanged, stopSelecting, shareSelection, pasteLink, showShare, closeShare, setShareTab, renderShare, showBackup, closeBackup, downloadBackup, shareBackup, driveBackup, driveRestoreList, importBackup, setSpace, createSpace, showAddSpace, closeAddSpace, newCatInline, showPages, closePages, mesureChanged,
     loadItems, showAddItem, closeAddItem, switchModalTab, fetchLinkPreview, previewPhoto, submitItem,
     showItemActions, changeStatus, deleteItem, onLinkInput,
-    openEmbed, closeEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,
+    openEmbed, closeEmbed, shareEmbed, openMedia, openEdit, closeEdit, submitEdit, restoreItem, deleteForever,
     setTagFilter, renderTagBar, tagsOf };
 })();

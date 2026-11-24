@@ -23,7 +23,7 @@
 
   <!-- Fonts -->
   <link rel="stylesheet" href="/tokens.css?v=4">
-  <link rel="stylesheet" href="/app.css?v=20">
+  <link rel="stylesheet" href="/app.css?v=21">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
@@ -284,9 +284,11 @@
   <div class="embed-shell">
     <div class="embed-header">
       <span class="embed-title" id="embedTitle"></span>
+      <button type="button" class="embed-open embed-share" id="embedShareBtn" hidden onclick="App.shareEmbed()"><span>Partager</span></button>
       <a class="embed-open" id="embedOpenLink" href="#" target="_blank" rel="noopener" aria-label="Ouvrir dans un nouvel onglet">Ouvrir ↗</a>
       <button class="embed-close" onclick="App.closeEmbed()" aria-label="Fermer">✕</button>
     </div>
+    <div class="pin-share embed-share-box" id="embedShare" hidden></div>
     <div class="embed-box" id="embedBox"></div>
   </div>
 </div>
@@ -314,6 +316,6 @@ if (!fresh && !sessionStorage.getItem('leketia:healed')) {
   location.reload();
 } else { window.SyncMerge = SyncMerge; window.ShareCodec = ShareCodec; }
 </script>
-<script src="/app.js?v=20"></script>
+<script src="/app.js?v=21"></script>
 </body>
 </html>
